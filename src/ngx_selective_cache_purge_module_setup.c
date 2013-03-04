@@ -1,4 +1,5 @@
 #include <ngx_selective_cache_purge_module.h>
+#include <ngx_selective_cache_purge_utils.c>
 
 static char *ngx_selective_cache_purge(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
@@ -72,14 +73,24 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     return conf;
 }
 
-
 static char *
 ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 {
     ngx_selective_cache_purge_main_conf_t     *conf = parent;
+    ngx_str_t *database_filename;
+    int ret;
 
     if (conf->database_filename.data != NULL) {
         conf->enabled = 1;
+
+        database_filename = ngx_alloc_str(cf->pool, conf->database_filename.len);
+        ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
+        ret = sqlite3_open((char *) database_filename->data, &conf->db);
+
+        if (ret) {
+            ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "cannot open sqlite database %s: %s", database_filename->data, sqlite3_errmsg(conf->db));
+            return NGX_CONF_ERROR;
+        }
     }
 
     return NGX_CONF_OK;

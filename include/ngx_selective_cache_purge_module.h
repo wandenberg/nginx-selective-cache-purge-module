@@ -1,6 +1,7 @@
 #ifndef _NGX_SELECTIVE_CACHE_PURGE_MODULE_H_
 #define _NGX_SELECTIVE_CACHE_PURGE_MODULE_H_
 
+#include <sqlite3.h>
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
@@ -8,6 +9,7 @@
 typedef struct {
     ngx_flag_t                enabled;
     ngx_str_t                 database_filename;
+    sqlite3                  *db;
 } ngx_selective_cache_purge_main_conf_t;
 
 typedef struct {
