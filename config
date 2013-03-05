@@ -1,6 +1,7 @@
 ngx_addon_name=ngx_selective_cache_purge_module
 ngx_feature_libs="-lsqlite3"
 HTTP_MODULES="$HTTP_MODULES ${ngx_addon_name}"
+HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ${ngx_addon_name}"
 CORE_INCS="$CORE_INCS ${ngx_addon_dir}/src ${ngx_addon_dir}/include"
 NGX_ADDON_SRCS="$NGX_ADDON_SRCS ${ngx_addon_dir}/src/${ngx_addon_name}.c"
 CORE_LIBS="$CORE_LIBS $ngx_feature_libs"

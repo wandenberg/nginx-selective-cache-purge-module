@@ -1,11 +1,46 @@
 #include <ngx_selective_cache_purge_module_utils.c>
 #include <ngx_selective_cache_purge_module_setup.c>
 
+
 static ngx_int_t
-ngx_selective_cache_purge_filter(ngx_http_request_t *r)
+ngx_selective_cache_purge_header_filter(ngx_http_request_t *r)
 {
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "ngx_selective_cache_purge: on access filter");
-    return NGX_OK;
+    ngx_uint_t         i;
+    size_t             len = 0;
+    u_char            *p = NULL;
+    ngx_str_t         *cache_key = NULL, *key = NULL;
+
+    if (!ngx_selective_cache_purge_module_main_conf->enabled) {
+        return ngx_selective_cache_purge_next_header_filter(r);
+    }
+
+    ngx_int_t ret = ngx_selective_cache_purge_next_header_filter(r);
+    if (r->cache && (!r->cache->exists || r->cache->updated)) {
+        key = r->cache->keys.elts;
+        for (i = 0; i < r->cache->keys.nelts; i++) {
+            len += key[i].len;
+        }
+
+        if ((cache_key = ngx_selective_cache_purge_alloc_str(r->pool, len)) == NULL) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to write the cache_key");
+            return ret;
+        }
+
+        key = r->cache->keys.elts;
+        p = cache_key->data;
+        for (i = 0; i < r->cache->keys.nelts; i++) {
+            p = ngx_copy(p, key[i].data, key[i].len);
+        }
+
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "ngx_selective_cache_purge: key: %V, path: %V, expires in: %ul, new: %d, zone: %V",
+                cache_key,
+                &r->cache->file.name,
+                r->cache->node->expire,
+                !r->cache->exists,
+                &r->cache->file_cache->shm_zone->shm.name);
+    }
+
+    return ret;
 }
 
 
