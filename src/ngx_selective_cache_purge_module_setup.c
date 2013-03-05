@@ -6,6 +6,7 @@ static char *ngx_selective_cache_purge(ngx_conf_t *cf, ngx_command_t *cmd, void 
 static ngx_int_t ngx_selective_cache_purge_postconfig(ngx_conf_t *cf);
 static void *ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf);
 static char *ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent);
+static ngx_int_t ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle);
 static void *ngx_selective_cache_purge_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
@@ -46,7 +47,7 @@ ngx_module_t  ngx_selective_cache_purge_module = {
     NGX_HTTP_MODULE,                           /* module type */
     NULL,                                      /* init master */
     NULL,                                      /* init module */
-    NULL,                                      /* init process */
+    ngx_selective_cache_purge_init_worker,     /* init process */
     NULL,                                      /* init thread */
     NULL,                                      /* exit thread */
     NULL,                                      /* exit process */
@@ -73,27 +74,48 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     return conf;
 }
 
+
 static char *
 ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 {
     ngx_selective_cache_purge_main_conf_t     *conf = parent;
-    ngx_str_t *database_filename;
-    int ret;
 
     if (conf->database_filename.data != NULL) {
         conf->enabled = 1;
-
-        database_filename = ngx_alloc_str(cf->pool, conf->database_filename.len);
-        ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
-        ret = sqlite3_open((char *) database_filename->data, &conf->db);
-
-        if (ret) {
-            ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "cannot open sqlite database %s: %s", database_filename->data, sqlite3_errmsg(conf->db));
-            return NGX_CONF_ERROR;
-        }
     }
 
     return NGX_CONF_OK;
+}
+
+
+static ngx_int_t
+ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
+{
+    if ((ngx_selective_cache_purge_module_main_conf == NULL) || !ngx_selective_cache_purge_module_main_conf->enabled) {
+        return NGX_OK;
+    }
+
+    if ((ngx_process != NGX_PROCESS_SINGLE) && (ngx_process != NGX_PROCESS_WORKER)) {
+        return NGX_OK;
+    }
+
+    ngx_selective_cache_purge_worker_data_t *thisworker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
+    ngx_selective_cache_purge_main_conf_t *conf = ngx_selective_cache_purge_module_main_conf;
+    ngx_str_t *database_filename;
+    int ret;
+
+    database_filename = ngx_alloc_str(cycle->pool, conf->database_filename.len);
+    ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
+    ret = sqlite3_open((char *) database_filename->data, &thisworker_data->db);
+
+    if (ret) {
+        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "cannot open sqlite database %s: %s", database_filename->data, sqlite3_errmsg(thisworker_data->db));
+        return NGX_ERROR;
+    }
+
+    thisworker_data->pid = ngx_pid;
+
+    return NGX_OK;
 }
 
 
