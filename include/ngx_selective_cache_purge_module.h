@@ -18,6 +18,7 @@ typedef struct {
 typedef struct {
     sqlite3                  *db;
     pid_t                     pid;
+    sqlite3_stmt             *insertKeyStmt;
 } ngx_selective_cache_purge_worker_data_t;
 
 static ngx_selective_cache_purge_main_conf_t *ngx_selective_cache_purge_module_main_conf;
