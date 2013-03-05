@@ -1,3 +1,4 @@
+#include <ngx_selective_cache_purge_module_utils.c>
 #include <ngx_selective_cache_purge_module_setup.c>
 
 static ngx_int_t

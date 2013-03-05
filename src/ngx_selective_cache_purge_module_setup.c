@@ -1,5 +1,5 @@
 #include <ngx_selective_cache_purge_module.h>
-#include <ngx_selective_cache_purge_utils.c>
+#include <ngx_selective_cache_purge_module_utils.h>
 
 static char *ngx_selective_cache_purge(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
@@ -104,7 +104,7 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
     ngx_str_t *database_filename;
     int ret;
 
-    database_filename = ngx_alloc_str(cycle->pool, conf->database_filename.len);
+    database_filename = ngx_selective_cache_purge_alloc_str(cycle->pool, conf->database_filename.len);
     ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
     ret = sqlite3_open((char *) database_filename->data, &thisworker_data->db);
 

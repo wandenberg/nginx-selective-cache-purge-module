@@ -3,6 +3,6 @@
 
 #include <ngx_core.h>
 
-static ngx_str_t * ngx_alloc_str(ngx_pool_t *pool, uint len);
+static ngx_str_t *ngx_selective_cache_purge_alloc_str(ngx_pool_t *pool, uint len);
 
 #endif /* _NGX_SELECTIVE_CACHE_PURGE_UTILS_H_ */
