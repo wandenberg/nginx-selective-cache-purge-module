@@ -100,21 +100,22 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
         return NGX_OK;
     }
 
-    ngx_selective_cache_purge_worker_data_t *thisworker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
     ngx_selective_cache_purge_main_conf_t *conf = ngx_selective_cache_purge_module_main_conf;
     ngx_str_t *database_filename;
     int ret;
 
+    ngx_selective_cache_purge_worker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
+
     database_filename = ngx_selective_cache_purge_alloc_str(cycle->pool, conf->database_filename.len);
     ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
-    ret = sqlite3_open((char *) database_filename->data, &thisworker_data->db);
+    ret = sqlite3_open_v2((char *) database_filename->data, &ngx_selective_cache_purge_worker_data->db, SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, NULL);
 
     if (ret) {
-        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "cannot open sqlite database %s: %s", database_filename->data, sqlite3_errmsg(thisworker_data->db));
+        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "worker pid %d cannot open sqlite database %s: %s", ngx_pid, database_filename->data, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 
-    thisworker_data->pid = ngx_pid;
+    ngx_selective_cache_purge_worker_data->pid = ngx_pid;
 
     return NGX_OK;
 }
