@@ -6,7 +6,7 @@ ngx_selective_cache_purge_init_table()
 {
     sqlite3 *db;
     sqlite3_open_v2((char *) ngx_selective_cache_purge_module_main_conf->database_filename.data, &db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, NULL);
-    sqlite3_exec(db, "create table selective_cache_purge (zone varchar, key varchar, path varchar, expire int);", NULL, NULL, NULL);
+    sqlite3_exec(db, NGX_SELECTIVE_CACHE_PURGE_CREATE_TABLE_SQL, NULL, NULL, NULL);
     sqlite3_close(db);
 }
 
@@ -29,9 +29,7 @@ ngx_selective_cache_purge_init_db()
 static ngx_int_t
 ngx_selective_cache_purge_init_prepared_statements()
 {
-    const char insertKeySql[] = "insert into selective_cache_purge values (:zone, :key, :path, :expire);";
-
-    if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, insertKeySql, -1, &ngx_selective_cache_purge_worker_data->insertKeyStmt, 0)) {
+    if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, NGX_SELECTIVE_CACHE_PURGE_INSERT_SQL, -1, &ngx_selective_cache_purge_worker_data->insertKeyStmt, 0)) {
         return NGX_ERROR;
     }
 
@@ -43,14 +41,21 @@ ngx_selective_cache_purge_store(ngx_str_t *zone, ngx_str_t *key, ngx_str_t *path
 {
     int ret;
 
-    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insertKeyStmt, 1,
-        (char *) zone->data, zone->len, NULL);
-    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insertKeyStmt, 2,
-        (char *) key->data, key->len, NULL);
-    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insertKeyStmt, 3,
-        (char *) path->data, path->len, NULL);
-    sqlite3_bind_int(ngx_selective_cache_purge_worker_data->insertKeyStmt, 4,
-        expire);
+    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insertKeyStmt,
+                      NGX_SELECTIVE_CACHE_PURGE_INSERT_ZONE_IDX,
+                      (char *) zone->data, zone->len, NULL);
+
+    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insertKeyStmt,
+                      NGX_SELECTIVE_CACHE_PURGE_INSERT_KEY_IDX,
+                      (char *) key->data, key->len, NULL);
+
+    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insertKeyStmt,
+                      NGX_SELECTIVE_CACHE_PURGE_INSERT_PATH_IDX,
+                      (char *) path->data, path->len, NULL);
+
+    sqlite3_bind_int(ngx_selective_cache_purge_worker_data->insertKeyStmt,
+                     NGX_SELECTIVE_CACHE_PURGE_INSERT_EXPIRE_IDX,
+                     expire);
 
     ret = sqlite3_step(ngx_selective_cache_purge_worker_data->insertKeyStmt);
 
