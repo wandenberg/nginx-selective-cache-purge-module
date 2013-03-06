@@ -60,8 +60,7 @@ ngx_selective_cache_purge_store(ngx_str_t *zone, ngx_str_t *key, ngx_str_t *path
 
     sqlite3_reset(ngx_selective_cache_purge_worker_data->insertKeyStmt);
 
-    if (ret) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "could not reset statement after use: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+    if (ret != SQLITE_DONE) {
         return NGX_ERROR;
     }
 
