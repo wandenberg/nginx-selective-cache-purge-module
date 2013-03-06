@@ -33,12 +33,7 @@ ngx_selective_cache_purge_header_filter(ngx_http_request_t *r)
             p = ngx_copy(p, key[i].data, key[i].len);
         }
 
-        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "ngx_selective_cache_purge: key: %V, path: %V, expires in: %ul, new: %d, zone: %V",
-                cache_key,
-                &r->cache->file.name,
-                r->cache->node->expire,
-                !r->cache->exists,
-                &r->cache->file_cache->shm_zone->shm.name);
+        ngx_selective_cache_purge_store(&r->cache->file_cache->shm_zone->shm.name, cache_key, &r->cache->file.name, r->cache->node->expire);
     }
 
     return ret;

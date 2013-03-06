@@ -83,8 +83,9 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
     ngx_selective_cache_purge_main_conf_t     *conf = parent;
 
     if (conf->database_filename.data != NULL) {
-        ngx_str_t *database_filename = ngx_selective_cache_purge_alloc_str(ngx_cycle->pool, ngx_selective_cache_purge_module_main_conf->database_filename.len);
-        ngx_snprintf(database_filename->data, ngx_selective_cache_purge_module_main_conf->database_filename.len, "%s", ngx_selective_cache_purge_module_main_conf->database_filename.data);
+
+        ngx_str_t *database_filename = ngx_selective_cache_purge_alloc_str(ngx_cycle->pool, conf->database_filename.len);
+        ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
         conf->database_filename.data = database_filename->data;
 
         ngx_selective_cache_purge_init_table();
@@ -110,12 +111,7 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
     ngx_selective_cache_purge_worker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
     ngx_selective_cache_purge_worker_data->pid = ngx_pid;
 
-    ngx_int_t init_db_status = ngx_selective_cache_purge_init_db();
-    if (init_db_status != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "worker pid %d cannot open sqlite database: %s", ngx_pid, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
-    }
-
-    return init_db_status;
+    return ngx_selective_cache_purge_init_db();
 }
 
 
