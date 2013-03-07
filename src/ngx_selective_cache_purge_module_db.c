@@ -84,13 +84,16 @@ ngx_selective_cache_purge_remove_by_query(ngx_str_t *query)
     const u_char *zone, *key, *path;
     int expire;
 
+    ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
+
     ngx_str_t *query_like = ngx_selective_cache_purge_alloc_str(ngx_cycle->pool,
             query->len + ngx_strlen(ngx_selective_cache_purge_db_wildcard));
     ngx_snprintf(query_like->data,
             query->len + ngx_strlen(ngx_selective_cache_purge_db_wildcard),
             "%V%%", query);
 
-    //TODO: lock parallel access
+    ngx_shmtx_lock(&shpool->mutex);
+
     sqlite3_bind_text(ngx_selective_cache_purge_worker_data->delete_like_stmt,
                       NGX_SELECTIVE_CACHE_PURGE_DELETE_LIKE_IDX,
                       (char *) query_like->data, query_like->len, NULL);
@@ -124,6 +127,8 @@ ngx_selective_cache_purge_remove_by_query(ngx_str_t *query)
     }
 
     sqlite3_reset(ngx_selective_cache_purge_worker_data->delete_like_stmt);
+
+    ngx_shmtx_unlock(&shpool->mutex);
 
     if (ret != SQLITE_DONE) {
         return NGX_ERROR;

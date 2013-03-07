@@ -12,6 +12,9 @@ static ngx_int_t ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle);
 static void *ngx_selective_cache_purge_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
+static ngx_int_t ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf);
+static ngx_int_t ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data);
+
 static ngx_command_t  ngx_selective_cache_purge_commands[] = {
     { ngx_string("selective_cache_purge_database"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
@@ -160,6 +163,44 @@ ngx_selective_cache_purge_postconfig(ngx_conf_t *cf)
     if ((rc = ngx_selective_cache_purge_filter_init(cf)) != NGX_OK) {
         return rc;
     }
+
+    return ngx_selective_cache_purge_set_up_shm(cf);
+}
+
+
+static ngx_int_t
+ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf)
+{
+    size_t shm_size = 2 * ngx_pagesize;
+
+    ngx_selective_cache_purge_shm_zone = ngx_shared_memory_add(cf, &ngx_selective_cache_purge_shm_name, shm_size, &ngx_selective_cache_purge_module);
+
+    if (ngx_selective_cache_purge_shm_zone == NULL) {
+        return NGX_ERROR;
+    }
+
+    ngx_selective_cache_purge_shm_zone->init = ngx_selective_cache_purge_init_shm_zone;
+    ngx_selective_cache_purge_shm_zone->data = (void *) 1;
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
+{
+    if (data) {
+        shm_zone->data = data;
+        return NGX_OK;
+    }
+
+    ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) shm_zone->shm.addr;
+    ngx_selective_cache_purge_shm_data_t *d;
+
+    if ((d = (ngx_selective_cache_purge_shm_data_t *) ngx_slab_alloc(shpool, sizeof(*d))) == NULL) {
+        return NGX_ERROR;
+    }
+    shm_zone->data = d;
 
     return NGX_OK;
 }
