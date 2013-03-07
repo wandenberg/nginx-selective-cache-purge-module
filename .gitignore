@@ -20,3 +20,10 @@
 .cproject
 .project
 *.sublime*
+
+# Mac OS X
+.DS_Store
+
+# Build Directory
+work/
+!**/work/
