@@ -11,7 +11,7 @@ static ngx_int_t ngx_selective_cache_purge_remove_by_query(ngx_str_t *query);
 
 static const u_char ngx_selective_cache_purge_db_wildcard[] = "%%";
 
-#define NGX_SELECTIVE_CACHE_PURGE_CREATE_TABLE_SQL "create table selective_cache_purge (zone varchar, cache_key varchar, path varchar, expire int);"
+#define NGX_SELECTIVE_CACHE_PURGE_CREATE_TABLE_SQL "create table selective_cache_purge (zone varchar, key varchar, path varchar, expire int);"
 
 #define NGX_SELECTIVE_CACHE_PURGE_INSERT_SQL "insert into selective_cache_purge values (:zone, :key, :path, :expire);"
 #define NGX_SELECTIVE_CACHE_PURGE_INSERT_ZONE_IDX 1
@@ -19,7 +19,7 @@ static const u_char ngx_selective_cache_purge_db_wildcard[] = "%%";
 #define NGX_SELECTIVE_CACHE_PURGE_INSERT_PATH_IDX 3
 #define NGX_SELECTIVE_CACHE_PURGE_INSERT_EXPIRE_IDX 4
 
-#define NGX_SELECTIVE_CACHE_PURGE_DELETE_SQL "delete from selective_cache_purge where cache_key like :query;"
+#define NGX_SELECTIVE_CACHE_PURGE_DELETE_SQL "delete from selective_cache_purge where key like :query;"
 #define NGX_SELECTIVE_CACHE_PURGE_DELETE_ZONE_IDX 1
 #define NGX_SELECTIVE_CACHE_PURGE_DELETE_KEY_IDX 2
 #define NGX_SELECTIVE_CACHE_PURGE_DELETE_PATH_IDX 3
