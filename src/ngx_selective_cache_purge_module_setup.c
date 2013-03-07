@@ -85,7 +85,7 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
     if (conf->database_filename.data != NULL) {
 
         ngx_str_t *database_filename = ngx_selective_cache_purge_alloc_str(ngx_cycle->pool, conf->database_filename.len);
-        ngx_snprintf(database_filename->data, conf->database_filename.len, "%s", conf->database_filename.data);
+        ngx_snprintf(database_filename->data, conf->database_filename.len, "%V", &conf->database_filename);
         conf->database_filename.data = database_filename->data;
 
         ngx_selective_cache_purge_init_table();
