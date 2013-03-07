@@ -33,6 +33,10 @@ ngx_selective_cache_purge_init_prepared_statements()
         return NGX_ERROR;
     }
 
+    if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, NGX_SELECTIVE_CACHE_PURGE_DELETE_SQL, -1, &ngx_selective_cache_purge_worker_data->delete_like_stmt, 0)) {
+        return NGX_ERROR;
+    }
+
     return NGX_OK;
 }
 
@@ -64,6 +68,62 @@ ngx_selective_cache_purge_store(ngx_str_t *zone, ngx_str_t *key, ngx_str_t *path
     }
 
     sqlite3_reset(ngx_selective_cache_purge_worker_data->insert_key_stmt);
+
+    if (ret != SQLITE_DONE) {
+        return NGX_ERROR;
+    }
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
+ngx_selective_cache_purge_remove_by_query(ngx_str_t *query)
+{
+    int ret;
+    const u_char *zone, *key, *path;
+    int expire;
+
+    ngx_str_t *query_like = ngx_selective_cache_purge_alloc_str(ngx_cycle->pool,
+            query->len + ngx_strlen(ngx_selective_cache_purge_db_wildcard));
+    ngx_snprintf(query_like->data,
+            query->len + ngx_strlen(ngx_selective_cache_purge_db_wildcard),
+            "%V%%", query);
+
+    //TODO: lock parallel access
+    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->delete_like_stmt,
+                      NGX_SELECTIVE_CACHE_PURGE_DELETE_LIKE_IDX,
+                      (char *) query_like->data, query_like->len, NULL);
+
+    ret = sqlite3_step(ngx_selective_cache_purge_worker_data->delete_like_stmt);
+
+    while (ret == SQLITE_ROW) {
+        zone = sqlite3_column_text(
+                ngx_selective_cache_purge_worker_data->delete_like_stmt,
+                NGX_SELECTIVE_CACHE_PURGE_DELETE_ZONE_IDX);
+
+        key = sqlite3_column_text(
+                ngx_selective_cache_purge_worker_data->delete_like_stmt,
+                NGX_SELECTIVE_CACHE_PURGE_DELETE_KEY_IDX);
+
+        path = sqlite3_column_text(
+                ngx_selective_cache_purge_worker_data->delete_like_stmt,
+                NGX_SELECTIVE_CACHE_PURGE_DELETE_PATH_IDX);
+
+        expire = sqlite3_column_int(
+                ngx_selective_cache_purge_worker_data->delete_like_stmt,
+                NGX_SELECTIVE_CACHE_PURGE_DELETE_EXPIRE_IDX);
+
+        //TODO: remove from cache
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                      "ngx_selective_cache_purge query %V deleted: %s, %s, %s, %d",
+                      query_like, zone, key, path, expire);
+
+        ret = sqlite3_step(
+                ngx_selective_cache_purge_worker_data->delete_like_stmt);
+    }
+
+    sqlite3_reset(ngx_selective_cache_purge_worker_data->delete_like_stmt);
 
     if (ret != SQLITE_DONE) {
         return NGX_ERROR;

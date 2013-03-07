@@ -53,7 +53,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
 
     ngx_http_complex_value(r, conf->purge_query, &vv_purge_query);
 
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "ngx_selective_cache_purge: on handler %V", &vv_purge_query);
+    ngx_selective_cache_purge_remove_by_query(&vv_purge_query);
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = 0;
