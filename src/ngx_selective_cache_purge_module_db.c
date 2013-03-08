@@ -9,13 +9,13 @@ ngx_selective_cache_purge_init_db()
 
     if (sqlite3_open_v2((char *) ngx_selective_cache_purge_module_main_conf->database_filename.data, &ngx_selective_cache_purge_worker_data->db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOMUTEX, NULL)) {
         ngx_shmtx_unlock(&shpool->mutex);
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: database open error - pid %d cannot open db: %s", ngx_pid, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: database open error - pid %P cannot open db: %s", ngx_pid, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 
     if (sqlite3_db_readonly(ngx_selective_cache_purge_worker_data->db, 0)) {
         ngx_shmtx_unlock(&shpool->mutex);
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: database open error - pid %d opened db read-only", ngx_pid);
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: database open error - pid %P opened db read-only", ngx_pid);
         return NGX_ERROR;
     }
 
@@ -28,10 +28,12 @@ static ngx_int_t
 ngx_selective_cache_purge_init_prepared_statements()
 {
     if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, NGX_SELECTIVE_CACHE_PURGE_INSERT_SQL, -1, &ngx_selective_cache_purge_worker_data->insert_key_stmt, 0)) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: couldn't prepare stmt for insert: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 
     if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, NGX_SELECTIVE_CACHE_PURGE_DELETE_SQL, -1, &ngx_selective_cache_purge_worker_data->delete_like_stmt, 0)) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: couldn't prepare stmt for delete: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 
