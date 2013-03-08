@@ -91,8 +91,6 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
         ngx_snprintf(database_filename->data, conf->database_filename.len, "%V", &conf->database_filename);
         conf->database_filename.data = database_filename->data;
 
-        ngx_selective_cache_purge_init_table();
-
         conf->enabled = 1;
     }
 
