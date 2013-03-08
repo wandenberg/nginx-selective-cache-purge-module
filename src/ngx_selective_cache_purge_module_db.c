@@ -7,7 +7,7 @@ ngx_selective_cache_purge_init_db()
     ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
     ngx_shmtx_lock(&shpool->mutex);
 
-    if (sqlite3_open_v2((char *) ngx_selective_cache_purge_module_main_conf->database_filename.data, &ngx_selective_cache_purge_worker_data->db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, NULL)) {
+    if (sqlite3_open_v2((char *) ngx_selective_cache_purge_module_main_conf->database_filename.data, &ngx_selective_cache_purge_worker_data->db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOMUTEX, NULL)) {
         ngx_shmtx_unlock(&shpool->mutex);
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: database open error - pid %d cannot open db: %s", ngx_pid, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
@@ -41,6 +41,7 @@ ngx_selective_cache_purge_init_prepared_statements()
 static ngx_int_t
 ngx_selective_cache_purge_store(ngx_str_t *zone, ngx_str_t *key, ngx_str_t *path, time_t expire)
 {
+    ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
     int ret;
 
     sqlite3_bind_text(ngx_selective_cache_purge_worker_data->insert_key_stmt,
@@ -59,7 +60,9 @@ ngx_selective_cache_purge_store(ngx_str_t *zone, ngx_str_t *key, ngx_str_t *path
                      NGX_SELECTIVE_CACHE_PURGE_INSERT_EXPIRE_IDX,
                      expire);
 
+    ngx_shmtx_lock(&shpool->mutex);
     ret = sqlite3_step(ngx_selective_cache_purge_worker_data->insert_key_stmt);
+    ngx_shmtx_unlock(&shpool->mutex);
 
     if (ret != SQLITE_DONE) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "could not insert: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
