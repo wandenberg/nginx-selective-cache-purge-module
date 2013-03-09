@@ -128,13 +128,14 @@ ngx_selective_cache_purge_remove(ngx_http_request_t *r, ngx_str_t *zone, ngx_str
 }
 
 
-ngx_selective_cache_purge_cache_item_t *
+ngx_queue_t *
 ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *query)
 {
     int ret;
     const u_char *zone, *type, *cache_key, *filename;
     int expires;
-    ngx_selective_cache_purge_cache_item_t *selected_items = NULL, *cur = NULL;
+    ngx_selective_cache_purge_cache_item_t *cur = NULL;
+    ngx_queue_t *selected_items = NULL;
 
 
     sqlite3_bind_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_BY_CACHE_KEY_WHERE_CACHE_KEY_IDX, (char *) query->data, query->len, NULL);
@@ -168,11 +169,13 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *
         }
 
         if (selected_items == NULL) {
-            selected_items = cur;
-            ngx_queue_init(&selected_items->queue);
-        } else {
-            ngx_queue_insert_tail(&selected_items->queue, &cur->queue);
+            if ((selected_items = (ngx_queue_t *) ngx_palloc(r->pool, sizeof(ngx_queue_t))) == NULL) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not allocate memory to queue sentinel");
+                break;
+            }
+            ngx_queue_init(selected_items);
         }
+        ngx_queue_insert_tail(selected_items, &cur->queue);
     }
 
     sqlite3_reset(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt);

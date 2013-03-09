@@ -30,6 +30,7 @@ typedef struct {
     ngx_str_t                *cache_key;
     ngx_str_t                *filename;
     int                       expires;
+    ngx_flag_t                removed;
 } ngx_selective_cache_purge_cache_item_t;
 
 // shared memory
