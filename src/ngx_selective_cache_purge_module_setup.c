@@ -113,6 +113,7 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
     ngx_selective_cache_purge_worker_data->db = NULL;
     ngx_selective_cache_purge_worker_data->delete_stmt = NULL;
     ngx_selective_cache_purge_worker_data->insert_stmt = NULL;
+    ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt = NULL;
 
     return ngx_selective_cache_purge_init_db();
 }

@@ -11,6 +11,15 @@
 #define INSERT_FILENAME_IDX   4
 #define INSERT_EXPIRES_IDX    5
 
+#define SELECT_BY_CACHE_KEY_SQL "select zone, type, cache_key, filename, expires from selective_cache_purge where cache_key like :cache_key order by zone, type;"
+#define SELECT_ZONE_IDX       0
+#define SELECT_TYPE_IDX       1
+#define SELECT_CACHE_KEY_IDX  2
+#define SELECT_FILENAME_IDX   3
+#define SELECT_EXPIRES_IDX    4
+
+#define SELECT_BY_CACHE_KEY_WHERE_CACHE_KEY_IDX 1
+
 #define DELETE_SQL "delete from selective_cache_purge where zone = :zone and type = :type and cache_key = :cache_key;"
 #define DELETE_ZONE_IDX       1
 #define DELETE_TYPE_IDX       2
@@ -54,6 +63,11 @@ ngx_selective_cache_purge_init_prepared_statements()
         return NGX_ERROR;
     }
 
+    if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, SELECT_BY_CACHE_KEY_SQL, -1, &ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, 0)) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: couldn't prepare stmt for select by cache_key: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+        return NGX_ERROR;
+    }
+
     return NGX_OK;
 }
 
@@ -86,8 +100,8 @@ ngx_selective_cache_purge_store(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_
 }
 
 
-static ngx_int_t
-ngx_selective_cache_purge_remove_by_query(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key)
+ngx_int_t
+ngx_selective_cache_purge_remove(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key)
 {
     int ret;
 
@@ -111,4 +125,56 @@ ngx_selective_cache_purge_remove_by_query(ngx_http_request_t *r, ngx_str_t *zone
     }
 
     return NGX_OK;
+}
+
+
+ngx_selective_cache_purge_cache_item_t *
+ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *query)
+{
+    int ret;
+    const u_char *zone, *type, *cache_key, *filename;
+    int expires;
+    ngx_selective_cache_purge_cache_item_t *selected_items = NULL, *cur = NULL;
+
+
+    sqlite3_bind_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_BY_CACHE_KEY_WHERE_CACHE_KEY_IDX, (char *) query->data, query->len, NULL);
+
+    while ((ret = sqlite3_step(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt)) == SQLITE_ROW) {
+        if ((cur = (ngx_selective_cache_purge_cache_item_t *) ngx_palloc(r->pool, sizeof(ngx_selective_cache_purge_cache_item_t))) == NULL) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not allocate memory to result list");
+            break;
+        }
+
+        zone = sqlite3_column_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_ZONE_IDX);
+        type = sqlite3_column_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_TYPE_IDX);
+        cache_key = sqlite3_column_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_CACHE_KEY_IDX);
+        filename = sqlite3_column_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_FILENAME_IDX);
+        expires = sqlite3_column_int(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_EXPIRES_IDX);
+
+        cur->zone = ngx_selective_cache_purge_alloc_str(r->pool, ngx_strlen(zone));
+        cur->type = ngx_selective_cache_purge_alloc_str(r->pool, ngx_strlen(type));
+        cur->cache_key = ngx_selective_cache_purge_alloc_str(r->pool, ngx_strlen(cache_key));
+        cur->filename = ngx_selective_cache_purge_alloc_str(r->pool, ngx_strlen(filename));
+
+        if ((cur->zone != NULL) && (cur->type != NULL) && (cur->cache_key != NULL) && (cur->filename != NULL)) {
+            ngx_memcpy(cur->zone->data, zone, cur->zone->len);
+            ngx_memcpy(cur->type->data, type, cur->type->len);
+            ngx_memcpy(cur->cache_key->data, cache_key, cur->cache_key->len);
+            ngx_memcpy(cur->filename->data, filename, cur->filename->len);
+            cur->expires = expires;
+        } else {
+            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not allocate memory to keep a selected item", query, zone, type, cache_key, filename, expires);
+            break;
+        }
+
+        if (selected_items == NULL) {
+            selected_items = cur;
+            ngx_queue_init(&selected_items->queue);
+        } else {
+            ngx_queue_insert_tail(&selected_items->queue, &cur->queue);
+        }
+    }
+
+    sqlite3_reset(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt);
+    return selected_items;
 }
