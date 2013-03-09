@@ -3,6 +3,9 @@
 #include <ngx_selective_cache_purge_module_db.c>
 
 
+ngx_str_t default_type = ngx_string("proxy");
+ngx_str_t default_zone = ngx_string("zone");
+
 static ngx_int_t
 ngx_selective_cache_purge_header_filter(ngx_http_request_t *r)
 {
@@ -33,12 +36,7 @@ ngx_selective_cache_purge_header_filter(ngx_http_request_t *r)
             p = ngx_copy(p, key[i].data, key[i].len);
         }
 
-        ngx_selective_cache_purge_store(
-                &r->cache->file_cache->shm_zone->shm.name,
-                cache_key,
-                &r->cache->file.name,
-                r->cache->node->expire
-        );
+        ngx_selective_cache_purge_store(r, &r->cache->file_cache->shm_zone->shm.name, &default_type, cache_key, &r->cache->file.name, r->cache->node->expire);
     }
 
     return ret;
@@ -53,7 +51,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
 
     ngx_http_complex_value(r, conf->purge_query, &vv_purge_query);
 
-    ngx_selective_cache_purge_remove_by_query(&vv_purge_query);
+    ngx_selective_cache_purge_remove_by_query(r, &default_zone, &default_type, &vv_purge_query);
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = 0;

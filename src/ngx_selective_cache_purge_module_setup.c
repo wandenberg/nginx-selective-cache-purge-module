@@ -110,7 +110,9 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
     }
 
     ngx_selective_cache_purge_worker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
-    ngx_selective_cache_purge_worker_data->pid = ngx_pid;
+    ngx_selective_cache_purge_worker_data->db = NULL;
+    ngx_selective_cache_purge_worker_data->delete_stmt = NULL;
+    ngx_selective_cache_purge_worker_data->insert_stmt = NULL;
 
     return ngx_selective_cache_purge_init_db();
 }

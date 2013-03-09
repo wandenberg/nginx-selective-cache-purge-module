@@ -18,9 +18,8 @@ typedef struct {
 
 typedef struct {
     sqlite3                  *db;
-    pid_t                     pid;
-    sqlite3_stmt             *insert_key_stmt;
-    sqlite3_stmt             *delete_like_stmt;
+    sqlite3_stmt             *insert_stmt;
+    sqlite3_stmt             *delete_stmt;
 } ngx_selective_cache_purge_worker_data_t;
 
 // shared memory
