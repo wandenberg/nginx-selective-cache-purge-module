@@ -5,6 +5,8 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
+#include <ngx_rbtree.h>
+#include <ngx_http_cache.h>
 #include <nginx.h>
 
 typedef struct {
@@ -30,12 +32,20 @@ typedef struct {
     ngx_str_t                *cache_key;
     ngx_str_t                *filename;
     int                       expires;
+    ngx_str_t                *path;
     ngx_flag_t                removed;
 } ngx_selective_cache_purge_cache_item_t;
 
+typedef struct {
+    ngx_rbtree_node_t                   node;
+    ngx_str_t                          *name;
+    ngx_str_t                          *type;
+    ngx_shm_zone_t                     *cache;
+} ngx_selective_cache_purge_zone_t;
+
 // shared memory
 typedef struct {
-    ngx_flag_t                enabled;
+    ngx_rbtree_t              zones_tree;
 } ngx_selective_cache_purge_shm_data_t;
 
 static ngx_selective_cache_purge_main_conf_t *ngx_selective_cache_purge_module_main_conf;

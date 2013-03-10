@@ -15,6 +15,8 @@ static char *ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *pare
 static ngx_int_t ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf);
 static ngx_int_t ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data);
 
+ngx_list_t *ngx_selective_cache_purge_shared_memory_list;
+
 static ngx_command_t  ngx_selective_cache_purge_commands[] = {
     { ngx_string("selective_cache_purge_database"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
@@ -83,6 +85,7 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
 static char *
 ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 {
+#ifdef NGX_HTTP_CACHE
     ngx_selective_cache_purge_main_conf_t     *conf = parent;
 
     if (conf->database_filename.data != NULL) {
@@ -93,6 +96,7 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 
         conf->enabled = 1;
     }
+#endif
 
     return NGX_CONF_OK;
 }
@@ -145,6 +149,11 @@ ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *parent, void *chi
         conf->purge_query = prev->purge_query;
     }
 
+    if (!ngx_selective_cache_purge_module_main_conf->enabled && (conf->purge_query != NULL)) {
+        ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "ngx_selective_cache_purge: could not use this module without set a database or compile Nginx with cache support");
+        return NGX_CONF_ERROR;
+    }
+
     return NGX_CONF_OK;
 }
 
@@ -172,7 +181,33 @@ ngx_selective_cache_purge_postconfig(ngx_conf_t *cf)
 static ngx_int_t
 ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf)
 {
-    size_t shm_size = 2 * ngx_pagesize;
+    ngx_uint_t                            i, qtd_zones = 0;
+    ngx_shm_zone_t                       *shm_zones;
+    ngx_list_part_t                      *part;
+    size_t                                shm_size = 0;
+
+    ngx_selective_cache_purge_shared_memory_list = &cf->cycle->shared_memory;
+
+    part = (ngx_list_part_t *) &ngx_selective_cache_purge_shared_memory_list->part;
+    shm_zones = part->elts;
+
+    for (i = 0; /* void */ ; i++) {
+
+        if (i >= part->nelts) {
+            if (part->next == NULL) {
+                break;
+            }
+            part = part->next;
+            shm_zones = part->elts;
+            i = 0;
+        }
+
+        if ((shm_zones[i].tag != NULL) && (ngx_selective_cache_purge_get_module_type_by_tag(shm_zones[i].tag) != NULL)) {
+            qtd_zones++;
+        }
+    }
+
+    shm_size = ngx_align((3 * ngx_pagesize) + (qtd_zones * sizeof(ngx_selective_cache_purge_zone_t)), ngx_pagesize);
 
     ngx_selective_cache_purge_shm_zone = ngx_shared_memory_add(cf, &ngx_selective_cache_purge_shm_name, shm_size, &ngx_selective_cache_purge_module);
 
@@ -197,12 +232,52 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
 
     ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) shm_zone->shm.addr;
     ngx_selective_cache_purge_shm_data_t *d;
+    ngx_rbtree_node_t                    *sentinel;
+    ngx_selective_cache_purge_zone_t     *zone;
+    ngx_uint_t                            i;
+    ngx_shm_zone_t                       *shm_zones;
+    ngx_list_part_t                      *part;
 
     if ((d = (ngx_selective_cache_purge_shm_data_t *) ngx_slab_alloc(shpool, sizeof(*d))) == NULL) {
         return NGX_ERROR;
     }
     shm_zone->data = d;
 
+    if ((sentinel = ngx_slab_alloc(shpool, sizeof(*sentinel))) == NULL) {
+        return NGX_ERROR;
+    }
+    ngx_rbtree_init(&d->zones_tree, sentinel, ngx_selective_cache_purge_rbtree_zones_insert);
+
+    part = (ngx_list_part_t *) &ngx_selective_cache_purge_shared_memory_list->part;
+    shm_zones = part->elts;
+
+    for (i = 0; /* void */ ; i++) {
+
+        if (i >= part->nelts) {
+            if (part->next == NULL) {
+                break;
+            }
+            part = part->next;
+            shm_zones = part->elts;
+            i = 0;
+        }
+
+        if (shm_zones[i].tag != NULL) {
+            ngx_str_t *type = ngx_selective_cache_purge_get_module_type_by_tag(shm_zones[i].tag);
+            if (type != NULL) {
+                if ((zone = ngx_slab_alloc(shpool, sizeof(*zone))) == NULL) {
+                    return NGX_ERROR;
+                }
+
+                zone->cache = &shm_zones[i];
+                zone->name = &shm_zones[i].shm.name;
+                zone->type = type;
+                zone->node.key = ngx_crc32_short(zone->name->data, zone->name->len);
+
+                ngx_rbtree_insert(&d->zones_tree, &zone->node);
+            }
+        }
+    }
     return NGX_OK;
 }
 

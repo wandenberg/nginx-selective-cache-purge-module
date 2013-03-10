@@ -162,6 +162,8 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *
             ngx_memcpy(cur->type->data, type, cur->type->len);
             ngx_memcpy(cur->cache_key->data, cache_key, cur->cache_key->len);
             ngx_memcpy(cur->filename->data, filename, cur->filename->len);
+            cur->path = NULL;
+            cur->removed = 0;
             cur->expires = expires;
         } else {
             ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not allocate memory to keep a selected item", query, zone, type, cache_key, filename, expires);

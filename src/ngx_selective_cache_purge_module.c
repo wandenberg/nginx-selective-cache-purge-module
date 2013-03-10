@@ -4,8 +4,9 @@
 
 ngx_str_t        *ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t *cache_key);
-ngx_str_t        *ngx_selective_cache_purge_get_module_type_by_tag(void *tag);
 ngx_int_t         ngx_selective_cache_purge_remove_chache_entry(ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry);
+
+ngx_http_file_cache_node_t *ngx_selective_cache_purge_lookup_by_filename(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *filename, ngx_http_file_cache_t **cache);
 
 static ngx_str_t NOT_FOUND_MESSAGE = ngx_string("Could not found any entry that match the expression: %V\n");
 static ngx_str_t OK_MESSAGE = ngx_string("The following entries where purged matched by the expression: %V\n");
@@ -80,6 +81,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
                 ngx_selective_cache_purge_send_response_text(r, entry->cache_key->data, entry->cache_key->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, CACHE_KEY_FILENAME_SEPARATOR.data, CACHE_KEY_FILENAME_SEPARATOR.len, 0);
 
+                ngx_selective_cache_purge_send_response_text(r, entry->path->data, entry->path->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, entry->filename->data, entry->filename->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, LF_SEPARATOR.data, LF_SEPARATOR.len, 0);
             }
@@ -148,42 +150,74 @@ ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t 
 ngx_int_t
 ngx_selective_cache_purge_remove_chache_entry(ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry)
 {
-    if (ngx_selective_cache_purge_remove(r, entry->zone, entry->type, entry->cache_key) == NGX_OK) {
-        entry->removed = 1;
-        return NGX_OK;
+    ngx_http_file_cache_t      *cache = NULL;
+    ngx_http_file_cache_node_t *fcn;
+    ngx_str_t                  *filename;
+
+    fcn = ngx_selective_cache_purge_lookup_by_filename(r, entry->zone, entry->type, entry->filename, &cache);
+    if (fcn != NULL) {
+        entry->path = &cache->path->name;
+
+        filename = ngx_selective_cache_purge_alloc_str(r->pool, entry->path->len + entry->filename->len);
+        if (filename == NULL) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to write the filename");
+        }
+
+        ngx_shmtx_lock(&cache->shpool->mutex);
+
+        if (!fcn->exists) {
+            /* race between concurrent purges, backoff */
+            ngx_shmtx_unlock(&cache->shpool->mutex);
+            return NGX_ERROR;
+        }
+
+        cache->sh->size -= fcn->fs_size;
+        fcn->fs_size = 0;
+        fcn->exists = 0;
+        fcn->updating = 0;
+
+        ngx_shmtx_unlock(&cache->shpool->mutex);
+
+        ngx_memcpy(filename->data, entry->path->data, entry->path->len);
+        ngx_memcpy(filename->data + entry->path->len, entry->filename->data, entry->filename->len);
+
+        if (ngx_delete_file(filename->data) == NGX_FILE_ERROR) {
+            /* entry in error log is enough, don't notice client */
+            ngx_log_error(NGX_LOG_CRIT, r->connection->log, ngx_errno, ngx_delete_file_n " \"%V\" failed", filename);
+        }
+
+        if (ngx_selective_cache_purge_remove(r, entry->zone, entry->type, entry->cache_key) == NGX_OK) {
+            entry->removed = 1;
+            return NGX_OK;
+        }
     }
+
     return NGX_ERROR;
 }
 
 
-ngx_str_t *
-ngx_selective_cache_purge_get_module_type_by_tag(void *tag)
+ngx_http_file_cache_node_t *
+ngx_selective_cache_purge_lookup_by_filename(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *filename, ngx_http_file_cache_t **out_cache)
 {
-    ngx_str_t *type = NULL;
+    ngx_http_file_cache_node_t *fcn = NULL;
+    ngx_http_file_cache_t      *cache = NULL;
+    u_char                      key[NGX_HTTP_CACHE_KEY_LEN];
+    size_t                      len = 2 * NGX_HTTP_CACHE_KEY_LEN;
 
-#if NGX_HTTP_FASTCGI
-    if (tag == &ngx_http_fastcgi_module) {
-        type = &NGX_SELECTIVE_CACHE_PURGE_FASTCGI_TYPE;
+
+    ngx_selective_cache_purge_zone_t *cache_zone = ngx_selective_cache_purge_find_zone(zone, type);
+    if (cache_zone != NULL) {
+
+        cache = (ngx_http_file_cache_t *) cache_zone->cache->data;
+        if (cache != NULL) {
+            *out_cache = cache;
+            ngx_selective_cache_purge_hex_read(key, filename->data + filename->len - len, len);
+
+            ngx_shmtx_lock(&cache->shpool->mutex);
+            fcn = ngx_selective_cache_purge_file_cache_lookup(cache, key);
+            ngx_shmtx_unlock(&cache->shpool->mutex);
+        }
     }
-#endif /* NGX_HTTP_FASTCGI */
 
-#if NGX_HTTP_PROXY
-    if (tag == &ngx_http_proxy_module) {
-        type = &NGX_SELECTIVE_CACHE_PURGE_PROXY_TYPE;
-    }
-#endif /* NGX_HTTP_PROXY */
-
-#if NGX_HTTP_SCGI
-    if (tag == &ngx_http_scgi_module) {
-        type = &NGX_SELECTIVE_CACHE_PURGE_SCGI_TYPE;
-    }
-#endif /* NGX_HTTP_SCGI */
-
-#if NGX_HTTP_UWSGI
-    if (tag == &ngx_http_uwsgi_module) {
-        type = &NGX_SELECTIVE_CACHE_PURGE_UWSGI_TYPE;
-    }
-#endif /* NGX_HTTP_UWSGI */
-
-    return type;
+    return fcn;
 }

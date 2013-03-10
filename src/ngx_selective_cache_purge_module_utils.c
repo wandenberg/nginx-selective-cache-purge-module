@@ -79,3 +79,181 @@ ngx_selective_cache_purge_send_response(ngx_http_request_t *r, u_char *data, siz
 
     return ngx_selective_cache_purge_send_response_text(r, data, len, 1);
 }
+
+
+static ngx_str_t *
+ngx_selective_cache_purge_get_module_type_by_tag(void *tag)
+{
+    ngx_str_t *type = NULL;
+
+#if NGX_HTTP_FASTCGI
+    if (tag == &ngx_http_fastcgi_module) {
+        type = &NGX_SELECTIVE_CACHE_PURGE_FASTCGI_TYPE;
+    }
+#endif /* NGX_HTTP_FASTCGI */
+
+#if NGX_HTTP_PROXY
+    if (tag == &ngx_http_proxy_module) {
+        type = &NGX_SELECTIVE_CACHE_PURGE_PROXY_TYPE;
+    }
+#endif /* NGX_HTTP_PROXY */
+
+#if NGX_HTTP_SCGI
+    if (tag == &ngx_http_scgi_module) {
+        type = &NGX_SELECTIVE_CACHE_PURGE_SCGI_TYPE;
+    }
+#endif /* NGX_HTTP_SCGI */
+
+#if NGX_HTTP_UWSGI
+    if (tag == &ngx_http_uwsgi_module) {
+        type = &NGX_SELECTIVE_CACHE_PURGE_UWSGI_TYPE;
+    }
+#endif /* NGX_HTTP_UWSGI */
+
+    return type;
+}
+
+
+u_char
+ngx_selective_cache_purge_hex_char_to_byte(u_char c)
+{
+    if(c >= '0' && c <= '9') {
+        return (u_char)(c - '0');
+    } else if(c >= 'A' && c <= 'F') {
+        return (u_char)(10 + c - 'A');
+    } else if(c >= 'a' && c <= 'f') {
+        return (u_char)(10 + c - 'a');
+    }
+    return 0;
+}
+
+
+u_char *
+ngx_selective_cache_purge_hex_read(u_char *dst, u_char *src, size_t len)
+{
+    while (len > 0) {
+        *dst  = (ngx_selective_cache_purge_hex_char_to_byte(*src++) << 4);
+        *dst |= (ngx_selective_cache_purge_hex_char_to_byte(*src++) & 0xf);
+
+        len -= 2;
+        dst++;
+    }
+    return dst;
+}
+
+
+static void *
+ngx_rbtree_generic_find(ngx_rbtree_t *tree, ngx_rbtree_key_t node_key, void *untie, int (*compare) (const ngx_rbtree_node_t *node, const void *untie))
+{
+    ngx_rbtree_node_t                  *node, *sentinel;
+    ngx_int_t                           rc;
+
+    node = tree->root;
+    sentinel = tree->sentinel;
+
+    while ((node != NULL) && (node != sentinel)) {
+        if (node_key < node->key) {
+            node = node->left;
+            continue;
+        }
+
+        if (node_key > node->key) {
+            node = node->right;
+            continue;
+        }
+
+        /* node_key == node->key */
+        rc = compare(node, untie);
+        if (rc == 0) {
+            return node;
+        }
+
+        node = (rc < 0) ? node->left : node->right;
+    }
+
+    return NULL;
+}
+
+
+static void
+ngx_rbtree_generic_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel, int (*compare) (const ngx_rbtree_node_t *left, const ngx_rbtree_node_t *right))
+{
+    ngx_rbtree_node_t       **p;
+
+    for (;;) {
+        if (node->key < temp->key) {
+            p = &temp->left;
+        } else if (node->key > temp->key) {
+            p = &temp->right;
+        } else { /* node->key == temp->key */
+            p = (compare(node, temp) < 0) ? &temp->left : &temp->right;
+        }
+
+        if (*p == sentinel) {
+            break;
+        }
+
+        temp = *p;
+    }
+
+    *p = node;
+    node->parent = temp;
+    node->left = sentinel;
+    node->right = sentinel;
+    ngx_rbt_red(node);
+}
+
+
+static int
+ngx_selective_cache_purge_compare_rbtree_zones_node(const ngx_rbtree_node_t *v_left, const ngx_rbtree_node_t *v_right)
+{
+    ngx_selective_cache_purge_zone_t *left = (ngx_selective_cache_purge_zone_t *) v_left, *right = (ngx_selective_cache_purge_zone_t *) v_right;
+    int rc = ngx_memn2cmp(left->name->data, right->name->data, left->name->len, right->name->len);
+    if (rc == 0) {
+        rc = ngx_memn2cmp(left->type->data, right->type->data, left->type->len, right->type->len);
+    }
+    return rc;
+}
+
+
+static int
+ngx_selective_cache_purge_compare_rbtree_zone_type(const ngx_rbtree_node_t *v_node, const void *v_type)
+{
+    ngx_selective_cache_purge_zone_t *node = (ngx_selective_cache_purge_zone_t *) v_node;
+    ngx_str_t *type = (ngx_str_t *) v_type;
+    return ngx_memn2cmp(node->type->data, type->data, node->type->len, type->len);
+}
+
+
+static void
+ngx_selective_cache_purge_rbtree_zones_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel)
+{
+    ngx_rbtree_generic_insert(temp, node, sentinel, ngx_selective_cache_purge_compare_rbtree_zones_node);
+}
+
+
+static ngx_selective_cache_purge_zone_t *
+ngx_selective_cache_purge_find_zone(ngx_str_t *zone, ngx_str_t *type)
+{
+    ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
+    ngx_rbtree_key_t node_key = ngx_crc32_short(zone->data, zone->len);
+    return (ngx_selective_cache_purge_zone_t *) ngx_rbtree_generic_find(&data->zones_tree, node_key, type, ngx_selective_cache_purge_compare_rbtree_zone_type);
+}
+
+
+static int
+ngx_selective_cache_purge_compare_rbtree_file_cache_key(const ngx_rbtree_node_t *v_node, const void *v_key)
+{
+    ngx_http_file_cache_node_t *node = (ngx_http_file_cache_node_t *) v_node;
+    u_char *key = (u_char *) v_key;
+    return ngx_memcmp(&key[sizeof(ngx_rbtree_key_t)], node->key, NGX_HTTP_CACHE_KEY_LEN - sizeof(ngx_rbtree_key_t));
+}
+
+
+static ngx_http_file_cache_node_t *
+ngx_selective_cache_purge_file_cache_lookup(ngx_http_file_cache_t *cache, u_char *key)
+{
+    ngx_rbtree_key_t             node_key;
+    ngx_memcpy((u_char *) &node_key, key, sizeof(ngx_rbtree_key_t));
+    return (ngx_http_file_cache_node_t *) ngx_rbtree_generic_find(&cache->sh->rbtree, node_key, key, ngx_selective_cache_purge_compare_rbtree_file_cache_key);
+}
