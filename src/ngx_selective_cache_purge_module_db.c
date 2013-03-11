@@ -2,9 +2,9 @@
 #include <ngx_selective_cache_purge_module_utils.h>
 
 
-#define CREATE_TABLE_SQL "create table selective_cache_purge (zone varchar, type varchar, cache_key varchar, filename varchar, expires int);"
+#define CREATE_TABLE_SQL "create table if not exists selective_cache_purge (zone varchar, type varchar, cache_key varchar, filename varchar, expires int, primary key (cache_key, zone, type));"
 
-#define INSERT_SQL "insert into selective_cache_purge values (:zone, :type, :cache_key, :filename, :expires);"
+#define INSERT_SQL "insert or replace into selective_cache_purge values (:zone, :type, :cache_key, :filename, :expires);"
 #define INSERT_ZONE_IDX       1
 #define INSERT_TYPE_IDX       2
 #define INSERT_CACHE_KEY_IDX  3
