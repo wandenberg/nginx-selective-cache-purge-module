@@ -1,5 +1,10 @@
-source :rubygems
+source 'https://rubygems.org'
 
-gem 'debugger'
-gem 'rspec'
-gem 'nginx_test_helper'
+gem 'rake'
+
+group :test do
+  gem 'rspec'
+  gem 'nginx_test_helper'
+  gem 'em-http-request'
+  gem 'debugger'
+end
