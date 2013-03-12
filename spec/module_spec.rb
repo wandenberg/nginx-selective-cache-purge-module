@@ -8,9 +8,10 @@ def response_for(url)
 end
 
 describe "Selective Cache Purge Module" do
-
   let!(:database_file) { File.join ENV['PWD'], "work", "cache.db" }
   let!(:config) { NginxConfiguration.default_configuration.merge database_file: database_file, purge_query: "$1%"}
+
+  let(:db) { db = SQLite3::Database.new database_file }
 
   context "database creation" do
     before :each do
@@ -23,7 +24,7 @@ describe "Selective Cache Purge Module" do
     end
 
     it "should show an error message when database file already exists but is invalid" do
-      File.open(database_file, 'w') { |f| f.write "muthafucka" }
+      File.open(database_file, 'w') { |f| f.write "somerandomstring" }
       nginx_test_configuration(config).should include ("ngx_selective_cache_purge: couldn't prepare stmt for insert: disk I/O error")
     end
   end
@@ -34,17 +35,33 @@ describe "Selective Cache Purge Module" do
     end
 
     it "should return 200 for a existing url" do
-      nginx_run_server(config)  do
+      nginx_run_server(config) do
         response_for("http://#{nginx_host}:#{nginx_port}/index.html").code.should eq '200'
       end
     end
 
-    xit "should save an entry after caching"
-
-    xit "should not save a url that returns not found" do
-      nginx_run_server(config)  do
-        response_for("http://#{nginx_host}:#{nginx_port}/not-found/index.html").code.should eq '404'
+    it "should not save entries for locations without cache enabled" do
+      path = "/no-cache/index.html"
+      nginx_run_server(config) do
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '200'
       end
+      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should be_empty
+    end
+
+    it "should save an entry after caching" do
+      path = "/index.html"
+      nginx_run_server(config) do
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '200'
+      end
+      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
+    end
+
+    it "should be able to save an entry for status codes other than 200" do
+      path = "/not-found/index.html"
+      nginx_run_server(config) do
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '404'
+      end
+      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
     end
   end
 
@@ -91,6 +108,15 @@ describe "Selective Cache Purge Module" do
         end
       end
 
+      it "should remove an entry from the database on successful purge" do
+        path = "/index.html"
+        nginx_run_server(config) do
+          prepare_cache
+          response_for("http://#{nginx_host}:#{nginx_port}/purge#{path}").code.should eq '200'
+        end
+        db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should be_empty
+      end
+
       it "should return a list of the removed entries after purging" do
         nginx_run_server(config) do
           prepare_cache
@@ -102,7 +128,7 @@ describe "Selective Cache Purge Module" do
         it "should return an empty list when the query does not match any entries" do
           nginx_run_server(config) do
             prepare_cache
-            response_for("http://#{nginx_host}:#{nginx_port}/purge/tabaco").body.should_not include(*cached_urls)
+            response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path").body.should_not include(*cached_urls)
           end
         end
 

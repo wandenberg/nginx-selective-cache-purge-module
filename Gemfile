@@ -6,5 +6,5 @@ group :test do
   gem 'rspec'
   gem 'nginx_test_helper'
   gem 'em-http-request'
-  gem 'debugger'
+  gem 'sqlite3-ruby', :require => 'sqlite3'
 end
