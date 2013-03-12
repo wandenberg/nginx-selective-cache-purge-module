@@ -9,6 +9,7 @@ static ngx_int_t  ngx_selective_cache_purge_send_response(ngx_http_request_t *r,
 static ngx_str_t *ngx_selective_cache_purge_get_module_type_by_tag(void *tag);
 
 static ngx_http_file_cache_node_t *ngx_selective_cache_purge_file_cache_lookup(ngx_http_file_cache_t *cache, u_char *key);
+static ngx_int_t                   ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_http_file_cache_t *cache, ngx_str_t *cache_key, u_char *key);
 
 static void ngx_selective_cache_purge_rbtree_zones_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel);
 

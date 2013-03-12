@@ -37,10 +37,16 @@ typedef struct {
 } ngx_selective_cache_purge_cache_item_t;
 
 typedef struct {
-    ngx_rbtree_node_t                   node;
-    ngx_str_t                          *name;
-    ngx_str_t                          *type;
-    ngx_shm_zone_t                     *cache;
+    ngx_queue_t              *entries;
+    ngx_str_t                 purge_query;
+    ngx_flag_t                remove_any_entry;
+} ngx_selective_cache_purge_request_ctx_t;
+
+typedef struct {
+    ngx_rbtree_node_t         node;
+    ngx_str_t                *name;
+    ngx_str_t                *type;
+    ngx_shm_zone_t           *cache;
 } ngx_selective_cache_purge_zone_t;
 
 // shared memory
@@ -59,6 +65,8 @@ ngx_http_output_header_filter_pt ngx_selective_cache_purge_next_header_filter;
 ngx_shm_zone_t *ngx_selective_cache_purge_shm_zone = NULL;
 
 static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cache_purge_module");
+
+#define NGX_HTTP_FILE_CACHE_KEY_LEN 6
 
 #if NGX_HTTP_FASTCGI
     extern ngx_module_t  ngx_http_fastcgi_module;

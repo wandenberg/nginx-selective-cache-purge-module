@@ -257,3 +257,68 @@ ngx_selective_cache_purge_file_cache_lookup(ngx_http_file_cache_t *cache, u_char
     ngx_memcpy((u_char *) &node_key, key, sizeof(ngx_rbtree_key_t));
     return (ngx_http_file_cache_node_t *) ngx_rbtree_generic_find(&cache->sh->rbtree, node_key, key, ngx_selective_cache_purge_compare_rbtree_file_cache_key);
 }
+
+
+static ngx_int_t
+ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_http_file_cache_t *cache, ngx_str_t *cache_key, u_char *md5_key)
+{
+    ngx_http_cache_t  *c;
+    ngx_str_t         *key;
+    ngx_int_t          rc;
+
+    c = r->cache;
+    if (c == NULL) {
+        c = ngx_pcalloc(r->pool, sizeof(ngx_http_cache_t));
+        if (c == NULL) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to ngx_http_cache_t structure");
+            return NGX_ERROR;
+        }
+
+        rc = ngx_array_init(&c->keys, r->pool, 1, sizeof(ngx_str_t));
+        if (rc != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to keys array");
+            return NGX_ERROR;
+        }
+    } else {
+        ngx_array_destroy(&c->keys);
+    }
+
+
+    key = ngx_array_push(&c->keys);
+    if (key == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to key item");
+        return NGX_ERROR;
+    }
+
+    key->data = cache_key->data;
+    key->len = cache_key->len;
+
+    r->cache = c;
+    c->body_start = ngx_pagesize;
+    c->file_cache = cache;
+    c->file.log = r->connection->log;
+
+    ngx_crc32_init(c->crc32);
+    ngx_crc32_update(&c->crc32, cache_key->data, cache_key->len);
+    ngx_crc32_final(c->crc32);
+
+    c->header_start = sizeof(ngx_http_file_cache_header_t) + NGX_HTTP_FILE_CACHE_KEY_LEN + cache_key->len + 1;
+
+    ngx_memcpy(c->key, md5_key, NGX_HTTP_CACHE_KEY_LEN);
+
+    switch (ngx_http_file_cache_open(r)) {
+    case NGX_OK:
+    case NGX_HTTP_CACHE_STALE:
+    case NGX_HTTP_CACHE_UPDATING:
+        return NGX_OK;
+        break;
+    case NGX_DECLINED:
+        return NGX_DECLINED;
+#  if (NGX_HAVE_FILE_AIO)
+    case NGX_AGAIN:
+        return NGX_AGAIN;
+#  endif
+    default:
+        return NGX_ERROR;
+    }
+}
