@@ -322,3 +322,35 @@ ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_h
         return NGX_ERROR;
     }
 }
+
+
+static void
+ngx_selective_cache_purge_timer_set(ngx_msec_t timer_interval, ngx_event_t *event, ngx_event_handler_pt event_handler, ngx_flag_t start_timer)
+{
+    if ((timer_interval != NGX_CONF_UNSET_MSEC) && start_timer) {
+        ngx_slab_pool_t     *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
+
+        if (event->handler == NULL) {
+            ngx_shmtx_lock(&shpool->mutex);
+            if (event->handler == NULL) {
+                event->handler = event_handler;
+                event->data = event; //set event as data to avoid error when running on debug mode (on log event)
+                event->log = ngx_cycle->log;
+                ngx_selective_cache_purge_timer_reset(timer_interval, event);
+            }
+            ngx_shmtx_unlock(&shpool->mutex);
+        }
+    }
+}
+
+
+static void
+ngx_selective_cache_purge_timer_reset(ngx_msec_t timer_interval, ngx_event_t *timer_event)
+{
+    if (!ngx_exiting && (timer_interval != NGX_CONF_UNSET_MSEC)) {
+        if (timer_event->timedout) {
+            ngx_time_update();
+        }
+        ngx_add_timer(timer_event, timer_interval);
+    }
+}

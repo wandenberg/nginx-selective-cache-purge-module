@@ -25,6 +25,8 @@
 #define DELETE_TYPE_IDX       2
 #define DELETE_CACHE_KEY_IDX  3
 
+#define DELETE_OLD_ENTRIES_SQL "delete from selective_cache_purge where expires < :expires;"
+
 
 static ngx_int_t
 ngx_selective_cache_purge_init_db()
@@ -60,6 +62,11 @@ ngx_selective_cache_purge_init_prepared_statements()
 
     if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, DELETE_SQL, -1, &ngx_selective_cache_purge_worker_data->delete_stmt, 0)) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: couldn't prepare stmt for delete: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+        return NGX_ERROR;
+    }
+
+    if (sqlite3_prepare_v2(ngx_selective_cache_purge_worker_data->db, DELETE_OLD_ENTRIES_SQL, -1, &ngx_selective_cache_purge_worker_data->delete_old_entries_stmt, 0)) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: couldn't prepare stmt for delete old entries: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 
@@ -121,6 +128,33 @@ ngx_selective_cache_purge_remove(ngx_http_request_t *r, ngx_str_t *zone, ngx_str
 
     if (ret != SQLITE_DONE) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not delete entries for: zone: %V, type: %V, cache_key: %V, msg: %s", zone, type, cache_key, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+        return NGX_ERROR;
+    }
+
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_selective_cache_purge_remove_old_entries()
+{
+    int ret;
+    time_t expires = ngx_time() - (24 * 3600);
+
+    ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
+
+    ngx_shmtx_lock(&shpool->mutex);
+
+    sqlite3_bind_int(ngx_selective_cache_purge_worker_data->delete_old_entries_stmt,  1, expires);
+
+    ret = sqlite3_step(ngx_selective_cache_purge_worker_data->delete_old_entries_stmt);
+
+    sqlite3_reset(ngx_selective_cache_purge_worker_data->delete_old_entries_stmt);
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    if (ret != SQLITE_DONE) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not delete entries older than: %ul, msg: %s", expires, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 

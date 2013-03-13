@@ -13,4 +13,7 @@ static ngx_int_t                   ngx_selective_cache_purge_file_cache_lookup_o
 
 static void ngx_selective_cache_purge_rbtree_zones_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel);
 
+static void ngx_selective_cache_purge_timer_reset(ngx_msec_t timer_interval, ngx_event_t *timer_event);
+static void ngx_selective_cache_purge_timer_set(ngx_msec_t timer_interval, ngx_event_t *event, ngx_event_handler_pt event_handler, ngx_flag_t start_timer);
+
 #endif /* _NGX_SELECTIVE_CACHE_PURGE_UTILS_H_ */

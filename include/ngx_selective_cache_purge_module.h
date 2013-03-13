@@ -12,6 +12,7 @@
 typedef struct {
     ngx_flag_t                enabled;
     ngx_str_t                 database_filename;
+    ngx_msec_t                database_cleanup_interval;
 } ngx_selective_cache_purge_main_conf_t;
 
 typedef struct {
@@ -22,6 +23,7 @@ typedef struct {
     sqlite3                  *db;
     sqlite3_stmt             *insert_stmt;
     sqlite3_stmt             *delete_stmt;
+    sqlite3_stmt             *delete_old_entries_stmt;
     sqlite3_stmt             *select_by_cache_key_stmt;
 } ngx_selective_cache_purge_worker_data_t;
 
@@ -66,7 +68,13 @@ ngx_shm_zone_t *ngx_selective_cache_purge_shm_zone = NULL;
 
 static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cache_purge_module");
 
+ngx_event_t ngx_selective_cache_purge_database_cleanup_event;
+
+static void ngx_selective_cache_purge_database_cleanup_timer_wake_handler(ngx_event_t *ev);
+
 #define NGX_HTTP_FILE_CACHE_KEY_LEN 6
+
+#define NGX_SELECTIVE_CACHE_PURGE_DATABASE_CLEANUP_INTERVAL 3600000 // 1hr
 
 #if NGX_HTTP_FASTCGI
     extern ngx_module_t  ngx_http_fastcgi_module;

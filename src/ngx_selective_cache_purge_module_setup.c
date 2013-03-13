@@ -24,6 +24,12 @@ static ngx_command_t  ngx_selective_cache_purge_commands[] = {
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_selective_cache_purge_main_conf_t, database_filename),
       NULL },
+    { ngx_string("selective_cache_purge_database_cleanup_interval"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_selective_cache_purge_main_conf_t, database_cleanup_interval),
+      NULL },
     { ngx_string("selective_cache_purge_query"),
       NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_selective_cache_purge,
@@ -75,6 +81,7 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
 
     conf->enabled = 0;
     conf->database_filename.data = NULL;
+    conf->database_cleanup_interval = NGX_CONF_UNSET_MSEC;
 
     ngx_selective_cache_purge_module_main_conf = conf;
 
@@ -96,6 +103,8 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 
         conf->enabled = 1;
     }
+
+    ngx_conf_init_msec_value(conf->database_cleanup_interval, NGX_SELECTIVE_CACHE_PURGE_DATABASE_CLEANUP_INTERVAL);
 #endif
 
     return NGX_CONF_OK;
@@ -116,8 +125,11 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
     ngx_selective_cache_purge_worker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
     ngx_selective_cache_purge_worker_data->db = NULL;
     ngx_selective_cache_purge_worker_data->delete_stmt = NULL;
+    ngx_selective_cache_purge_worker_data->delete_old_entries_stmt = NULL;
     ngx_selective_cache_purge_worker_data->insert_stmt = NULL;
     ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt = NULL;
+
+    ngx_selective_cache_purge_timer_set(ngx_selective_cache_purge_module_main_conf->database_cleanup_interval, &ngx_selective_cache_purge_database_cleanup_event, ngx_selective_cache_purge_database_cleanup_timer_wake_handler, 1);
 
     return ngx_selective_cache_purge_init_db();
 }

@@ -287,3 +287,11 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_http_request_t *r, ngx_selectiv
 
     return NGX_DECLINED;
 }
+
+
+static void
+ngx_selective_cache_purge_database_cleanup_timer_wake_handler(ngx_event_t *ev)
+{
+    ngx_selective_cache_purge_remove_old_entries();
+    ngx_selective_cache_purge_timer_reset(ngx_selective_cache_purge_module_main_conf->database_cleanup_interval, &ngx_selective_cache_purge_database_cleanup_event);
+}
