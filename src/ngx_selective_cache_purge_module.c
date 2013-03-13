@@ -208,7 +208,7 @@ ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t 
     ngx_str_t *filename = ngx_selective_cache_purge_alloc_str(r->pool, r->cache->file.name.len - r->cache->file_cache->path->name.len);
     if ((type != NULL) && (filename != NULL)) {
         ngx_memcpy(filename->data, r->cache->file.name.data + r->cache->file_cache->path->name.len, filename->len);
-        ngx_selective_cache_purge_store(r, zone, type, cache_key, filename, expires);
+        ngx_selective_cache_purge_store(r->connection->log, zone, type, cache_key, filename, expires);
     }
 #endif
 }

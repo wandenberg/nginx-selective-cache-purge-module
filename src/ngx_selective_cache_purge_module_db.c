@@ -79,7 +79,7 @@ ngx_selective_cache_purge_init_prepared_statements()
 }
 
 ngx_int_t
-ngx_selective_cache_purge_store(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires)
+ngx_selective_cache_purge_store(ngx_log_t *log, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires)
 {
     ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
     int ret;
@@ -99,7 +99,7 @@ ngx_selective_cache_purge_store(ngx_http_request_t *r, ngx_str_t *zone, ngx_str_
     ngx_shmtx_unlock(&shpool->mutex);
 
     if (ret != SQLITE_DONE) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "could not insert: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+        ngx_log_error(NGX_LOG_ERR, log, 0, "could not insert: %s", sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
         return NGX_ERROR;
     }
 
