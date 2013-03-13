@@ -334,7 +334,9 @@ ngx_selective_cache_purge_timer_set(ngx_msec_t timer_interval, ngx_event_t *even
             ngx_shmtx_lock(&shpool->mutex);
             if (event->handler == NULL) {
                 event->handler = event_handler;
-                event->data = event; //set event as data to avoid error when running on debug mode (on log event)
+                if (event->data == NULL) {
+                    event->data = event; //set event as data to avoid error when running on debug mode (on log event)
+                }
                 event->log = ngx_cycle->log;
                 ngx_selective_cache_purge_timer_reset(timer_interval, event);
             }
