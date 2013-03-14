@@ -356,3 +356,20 @@ ngx_selective_cache_purge_timer_reset(ngx_msec_t timer_interval, ngx_event_t *ti
         ngx_add_timer(timer_event, timer_interval);
     }
 }
+
+
+static void
+ngx_selective_cache_purge_rbtree_walker(ngx_rbtree_t *tree, ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool, ngx_int_t (*apply) (ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool))
+{
+    ngx_rbtree_node_t           *sentinel = tree->sentinel;
+
+    if ((node != NULL) && (node != sentinel)) {
+        apply(node, shpool);
+        if (node->left != NULL) {
+            ngx_selective_cache_purge_rbtree_walker(tree, node->left, shpool, apply);
+        }
+        if (node->right != NULL) {
+            ngx_selective_cache_purge_rbtree_walker(tree, node->right, shpool, apply);
+        }
+    }
+}

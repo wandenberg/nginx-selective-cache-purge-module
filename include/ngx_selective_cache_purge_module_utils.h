@@ -16,4 +16,6 @@ static void ngx_selective_cache_purge_rbtree_zones_insert(ngx_rbtree_node_t *tem
 static void ngx_selective_cache_purge_timer_reset(ngx_msec_t timer_interval, ngx_event_t *timer_event);
 static void ngx_selective_cache_purge_timer_set(ngx_msec_t timer_interval, ngx_event_t *event, ngx_event_handler_pt event_handler, ngx_flag_t start_timer);
 
+static void ngx_selective_cache_purge_rbtree_walker(ngx_rbtree_t *tree, ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool, ngx_int_t (*apply) (ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool));
+
 #endif /* _NGX_SELECTIVE_CACHE_PURGE_UTILS_H_ */

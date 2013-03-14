@@ -49,6 +49,8 @@ typedef struct {
     ngx_str_t                *name;
     ngx_str_t                *type;
     ngx_shm_zone_t           *cache;
+    ngx_event_t               sync_database_event;
+    ngx_atomic_t              running;
 } ngx_selective_cache_purge_zone_t;
 
 // shared memory
@@ -71,6 +73,8 @@ static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cach
 ngx_event_t ngx_selective_cache_purge_database_cleanup_event;
 
 static void ngx_selective_cache_purge_database_cleanup_timer_wake_handler(ngx_event_t *ev);
+
+ngx_int_t ngx_selective_cache_purge_start_sync_database_timer(ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool);
 
 #define NGX_HTTP_FILE_CACHE_KEY_LEN 6
 

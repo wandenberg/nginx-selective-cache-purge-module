@@ -131,6 +131,9 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
 
     ngx_selective_cache_purge_timer_set(ngx_selective_cache_purge_module_main_conf->database_cleanup_interval, &ngx_selective_cache_purge_database_cleanup_event, ngx_selective_cache_purge_database_cleanup_timer_wake_handler, 1);
 
+    ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
+    ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr, ngx_selective_cache_purge_start_sync_database_timer);
+
     return ngx_selective_cache_purge_init_db();
 }
 
@@ -285,6 +288,7 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
                 zone->name = &shm_zones[i].shm.name;
                 zone->type = type;
                 zone->node.key = ngx_crc32_short(zone->name->data, zone->name->len);
+                zone->running = 0;
 
                 ngx_rbtree_insert(&d->zones_tree, &zone->node);
             }

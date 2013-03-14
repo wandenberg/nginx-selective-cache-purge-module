@@ -295,3 +295,91 @@ ngx_selective_cache_purge_database_cleanup_timer_wake_handler(ngx_event_t *ev)
     ngx_selective_cache_purge_remove_old_entries();
     ngx_selective_cache_purge_timer_reset(ngx_selective_cache_purge_module_main_conf->database_cleanup_interval, &ngx_selective_cache_purge_database_cleanup_event);
 }
+
+
+static void
+ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
+{
+    ngx_selective_cache_purge_zone_t *node = (ngx_selective_cache_purge_zone_t *) ev->data;
+    ngx_http_file_cache_t            *cache = (ngx_http_file_cache_t *) node->cache->data;
+    ngx_http_file_cache_node_t       *fcn;
+    ngx_queue_t                      *q;
+    ngx_str_t                         cache_key = ngx_null_string, filename = ngx_null_string;
+    u_char                           *p;
+    size_t                            len = cache->path->name.len + 1 + cache->path->len + 2 * NGX_HTTP_CACHE_KEY_LEN;
+    u_char                            filename_data[len + 1];
+    ngx_http_file_cache_header_t      h;
+    ngx_file_t                        file;
+    ngx_err_t                         err;
+
+    ngx_memcpy(filename_data, cache->path->name.data, cache->path->name.len);
+    filename_data[len] = '\0';
+    filename.data = filename_data;
+    filename.len = len;
+
+    if (ngx_atomic_cmp_set(&node->running, 0, 1)) {
+        ngx_shmtx_lock(&cache->shpool->mutex);
+        for (q = ngx_queue_last(&cache->sh->queue); q != ngx_queue_sentinel(&cache->sh->queue); q = ngx_queue_prev(q)) {
+            fcn = ngx_queue_data(q, ngx_http_file_cache_node_t, queue);
+
+            p = filename_data + len - (2 * NGX_HTTP_CACHE_KEY_LEN);
+            p = ngx_hex_dump(p, (u_char *) &fcn->node.key, sizeof(ngx_rbtree_key_t));
+            p = ngx_hex_dump(p, fcn->key, NGX_HTTP_CACHE_KEY_LEN - sizeof(ngx_rbtree_key_t));
+
+            ngx_create_hashed_filename(cache->path, filename_data, len);
+
+            ngx_memzero(&file, sizeof(ngx_file_t));
+            file.name.data = filename.data;
+            file.name.len = filename.len;
+            file.log = ev->log;
+
+            file.fd = ngx_open_file(filename.data, NGX_FILE_RDONLY, 0, 0);
+            if (file.fd == NGX_INVALID_FILE) {
+                err = ngx_errno;
+                if (err != NGX_ENOENT) {
+                    ngx_log_error(NGX_LOG_CRIT, ev->log, err, ngx_open_file_n " \"%s\" failed", filename.data);
+                }
+                continue;
+            }
+
+            if (ngx_read_file(&file, (u_char *) &h, sizeof(ngx_http_file_cache_header_t), 0) == NGX_ERROR) {
+                continue;
+            }
+
+            cache_key.len = h.header_start - sizeof(ngx_http_file_cache_header_t) - NGX_HTTP_FILE_CACHE_KEY_LEN - 1;
+            u_char cache_key_data[cache_key.len + 1];
+            cache_key_data[cache_key.len] = '\0';
+            cache_key.data = cache_key_data;
+
+            if (ngx_read_file(&file, cache_key_data, cache_key.len, sizeof(ngx_http_file_cache_header_t) + NGX_HTTP_FILE_CACHE_KEY_LEN) == NGX_ERROR){
+                continue;
+            }
+
+            filename.len -= cache->path->name.len;
+            filename.data += cache->path->name.len;
+
+            ngx_selective_cache_purge_store(ev->log, node->name, node->type, &cache_key, &filename, fcn->expire);
+        }
+
+        node->running = 0;
+        ngx_shmtx_unlock(&cache->shpool->mutex);
+    }
+
+    if (cache->sh->cold || cache->sh->loading) {
+        ngx_selective_cache_purge_timer_reset(cache->loader_sleep * 1500, &node->sync_database_event);
+    }
+}
+
+
+ngx_int_t
+ngx_selective_cache_purge_start_sync_database_timer(ngx_rbtree_node_t *v_node, ngx_slab_pool_t *shpool)
+{
+    ngx_selective_cache_purge_zone_t *node = (ngx_selective_cache_purge_zone_t *) v_node;
+    ngx_http_file_cache_t            *cache = (ngx_http_file_cache_t *) node->cache->data;
+
+    if (ngx_process != NGX_PROCESS_SINGLE) {
+        node->sync_database_event.data = node;
+        ngx_selective_cache_purge_timer_set(cache->loader_sleep * 1500, &node->sync_database_event, ngx_selective_cache_purge_sync_database_timer_wake_handler, 1);
+    }
+    return NGX_OK;
+}
