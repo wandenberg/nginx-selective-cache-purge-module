@@ -7,4 +7,5 @@ group :test do
   gem 'nginx_test_helper'
   gem 'em-http-request'
   gem 'sqlite3'
+  gem 'debugger'
 end
