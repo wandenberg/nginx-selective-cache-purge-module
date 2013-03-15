@@ -20,12 +20,15 @@ end
 
 src_dir = File.dirname(__FILE__)
 
-nginx_dir = ENV['NGINX_SRC_DIR']
-nginx_dir ||= "#{src_dir}/../nginx-1.2.7"
+nginx_src_dir = ENV['NGINX_SRC_DIR']
+nginx_src_dir ||= "#{src_dir}/../nginx-1.2.7"
 
-obj_dir = File.join nginx_dir, "objs"
+nginx_prefix_dir = ENV['NGINX_PREFIX_DIR']
+nginx_prefix_dir ||= "/tmp/nginx_tests/nginx"
 
-nginx_makefile = "#{nginx_dir}/Makefile"
+obj_dir = File.join nginx_src_dir, "objs"
+
+nginx_makefile = "#{nginx_src_dir}/Makefile"
 
 def make(opts={})
   makefile_opt = opts[:makefile].nil? ? "" : "-f #{makefile}"
@@ -37,15 +40,15 @@ task :default => :build
 
 desc "Cleans up all objects"
 task :clean do
-  chdir nginx_dir do
+  chdir nginx_src_dir do
     make targets: [:clean]
   end
 end
 
 desc "Configure"
 task :configure do
-  chdir nginx_dir do
-    sh "./configure --prefix=#{nginx_dir} --add-module=#{ENV['PWD']} --with-debug"
+  chdir nginx_src_dir do
+    sh "./configure --prefix=#{nginx_prefix_dir} --add-module=#{ENV['PWD']} --with-debug"
   end
 end
 
@@ -55,9 +58,9 @@ file nginx_makefile do
 end
 
 file '#{obj_dir}/nginx' => [nginx_makefile] do
-  chdir nginx_dir do
-    sh "make"
-    ENV['NGINX_EXEC'] ||= "#{nginx_dir}/objs/nginx"
+  chdir nginx_src_dir do
+    sh "make -j2 && make install > /dev/null 2>&1"
+    ENV['NGINX_EXEC'] ||= "#{nginx_prefix_dir}/sbin/nginx"
   end
 end
 
