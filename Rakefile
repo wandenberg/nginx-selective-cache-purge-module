@@ -57,7 +57,7 @@ end
 file '#{obj_dir}/nginx' => [nginx_makefile] do
   chdir nginx_dir do
     sh "make"
-    ENV['NGINX_EXEC'] = "#{nginx_dir}/objs/nginx"
+    ENV['NGINX_EXEC'] ||= "#{nginx_dir}/objs/nginx"
   end
 end
 
