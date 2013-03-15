@@ -113,6 +113,14 @@ And run rspec pointing to where you Nginx binary is (default: /usr/local/nginx/s
 
     $ NGINX_EXEC=../path/to/my/nginx rspec spec/
 
+Also included in the project is a Rakefile that can be used to build nginx with only this module and run the test suite. The rake tasks can be found using the command:
+
+    $ rake -T
+
+To build and run rspec automatically using rake, you need to define where nginx sources are located (NGINX_SRC_DIR) and where it should be installed after built (NGINX_PREFIX_DIR, defaults to /tmp/nginx_tests/nginx):
+
+    $ NGINX_SRC_DIR=/path/to/nginx/sources NGINX_PREFIX_DIR=/tmp/nginx_tests/nginx rake spec
+
 
 Changelog
 ---------
