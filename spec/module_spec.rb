@@ -8,7 +8,7 @@ def response_for(url)
 end
 
 describe "Selective Cache Purge Module" do
-  let!(:database_file) { File.join ENV['PWD'], "work", "cache.db" }
+  let!(:database_file) { File.join "/", "tmp", "cache.db" }
   let!(:config) { NginxConfiguration.default_configuration.merge database_file: database_file, purge_query: "$1%"}
 
   let(:db) { db = SQLite3::Database.new database_file }
