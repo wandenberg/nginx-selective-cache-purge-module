@@ -9,31 +9,36 @@ end
 
 describe "Selective Cache Purge Module" do
   let!(:database_file) { File.join "/", "tmp", "cache.db" }
-  let!(:config) { NginxConfiguration.default_configuration.merge database_file: database_file, purge_query: "$1%"}
+  let!(:proxy_cache_path) { "/tmp/cache" }
+  let!(:config) { NginxConfiguration.default_configuration.merge worker_processes: 4, proxy_cache_path: proxy_cache_path, database_file: database_file, purge_query: "$1%" }
 
   let(:db) { db = SQLite3::Database.new database_file }
 
-  context "database creation" do
-    before :each do
-      File.unlink database_file if File.exists? database_file
-    end
+  before :each do
+    File.unlink database_file if File.exists? database_file
+  end
 
+  context "database creation" do
     it "should create the database file" do
       nginx_test_configuration(config)
       File.exists?(database_file).should be_true
     end
 
-    it "should show an error message when database file already exists but is invalid" do
-      File.open(database_file, 'w') { |f| f.write "somerandomstring" }
-      nginx_test_configuration(config).should include ("ngx_selective_cache_purge: couldn't prepare stmt for insert: disk I/O error")
+    context "displaying errors" do
+      it "should show an error message when database file cannot be created" do
+        error_config = config.merge database_file: "/path/to/missing/folder"
+        nginx_test_configuration(error_config).should include "cannot open db: unable to open database file"
+      end
+
+      it "should show an error message when database file already exists but is invalid" do
+        File.open(database_file, 'w') { |f| f.write "somerandomstring" }
+        nginx_test_configuration(config).should include "ngx_selective_cache_purge: couldn't prepare stmt for insert: disk I/O error"
+      end
+
     end
   end
 
   context "when caching" do
-    before do
-      File.unlink database_file if File.exists? database_file
-    end
-
     it "should return 200 for a existing url" do
       nginx_run_server(config) do
         response_for("http://#{nginx_host}:#{nginx_port}/index.html").code.should eq '200'
@@ -66,10 +71,6 @@ describe "Selective Cache Purge Module" do
   end
 
   context "when purging" do
-    before :each do
-      File.unlink database_file if File.exists? database_file
-    end
-
     it "should return 400 when purging with an empty query" do
       nginx_run_server(config.merge(purge_query: "$1")) do
         response_for("http://#{nginx_host}:#{nginx_port}/purge").code.should eq '400'
@@ -101,6 +102,33 @@ describe "Selective Cache Purge Module" do
         end
       end
 
+      it "should remove only the matched entries from database" do
+        purged_urls = ["/index.html","/index2.html"]
+        nginx_run_server(config) do
+          prepare_cache
+          response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
+        end
+        remaining_keys = db.execute("select cache_key from selective_cache_purge")
+        remaining_keys.flatten.should_not include *purged_urls
+        remaining_keys.flatten.should include *(cached_urls - purged_urls)
+      end
+
+      it "should remove the matched entries from the filesystem" do
+        purged_urls = ["/index.html","/index2.html"]
+        purged_files = []
+        nginx_run_server(config) do
+          prepare_cache
+          purged_files = db.execute("select filename from selective_cache_purge where cache_key like 'index%'").flatten
+          purged_files.each do |f|
+            File.exists?("#{proxy_cache_path}#{f}").should be_true
+          end
+          response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
+        end
+        purged_files.each do |f|
+          File.exists?("#{proxy_cache_path}#{f}").should be_false
+        end
+      end
+
       it "should return 200 for a non-empty query" do
         nginx_run_server(config) do
           prepare_cache
@@ -120,7 +148,7 @@ describe "Selective Cache Purge Module" do
       it "should return a list of the removed entries after purging" do
         nginx_run_server(config) do
           prepare_cache
-          response_for("http://#{nginx_host}:#{nginx_port}/purge/").body.should include(*cached_urls)
+          response_for("http://#{nginx_host}:#{nginx_port}/purge/").body.should include *cached_urls
         end
       end
 
@@ -128,20 +156,17 @@ describe "Selective Cache Purge Module" do
         it "should return an empty list when the query does not match any entries" do
           nginx_run_server(config) do
             prepare_cache
-            response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path").body.should_not include(*cached_urls)
+            response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path").body.should_not include *cached_urls
           end
         end
 
         it "should purge only urls that match the purge query" do
           nginx_run_server(config) do
             prepare_cache
-            purged_urls = [
-              "/index.html",
-              "/index2.html"
-            ]
+            purged_urls = ["/index.html","/index2.html"]
             response = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
-            response.body.should include(*purged_urls)
-            response.body.should_not include(*(cached_urls - purged_urls))
+            response.body.should include *purged_urls
+            response.body.should_not include *(cached_urls - purged_urls)
           end
         end
 
@@ -154,8 +179,8 @@ describe "Selective Cache Purge Module" do
               "/resources/r3.jpg"
             ]
             response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
-            response.body.should include(*purged_urls)
-            response.body.should_not include(*(cached_urls - purged_urls))
+            response.body.should include *purged_urls
+            response.body.should_not include *(cached_urls - purged_urls)
           end
         end
       end

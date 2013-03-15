@@ -2,7 +2,8 @@ require "spec_helper"
 
 describe "Selective Cache Purge Module Database Lock" do
   let!(:database_file) { File.join "/", "tmp", "cache.db" }
-  let!(:config) { NginxConfiguration.default_configuration.merge worker_processes: 4, database_file: database_file, purge_query: "$1%"}
+  let!(:proxy_cache_path) { "/tmp/cache" }
+  let!(:config) { NginxConfiguration.default_configuration.merge worker_processes: 4, proxy_cache_path: proxy_cache_path, database_file: database_file, purge_query: "$1%" }
 
   let(:db) { SQLite3::Database.new database_file }
 
