@@ -276,7 +276,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_http_request_t *r, ngx_selectiv
 
         if (ngx_delete_file(filename->data) == NGX_FILE_ERROR) {
             /* entry in error log is enough, don't notice client */
-            ngx_log_error(NGX_LOG_CRIT, r->connection->log, ngx_errno, ngx_delete_file_n " \"%V\" failed", filename);
+            ngx_log_error(NGX_LOG_CRIT, r->connection->log, ngx_errno, "ngx_selective_cache_purge: "ngx_delete_file_n " \"%V\" failed", filename);
         }
 
         if (ngx_selective_cache_purge_remove(r, entry->zone, entry->type, entry->cache_key) == NGX_OK) {
@@ -304,7 +304,7 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
     ngx_http_file_cache_t            *cache = (ngx_http_file_cache_t *) node->cache->data;
     ngx_http_file_cache_node_t       *fcn;
     ngx_queue_t                      *q;
-    ngx_str_t                         cache_key = ngx_null_string, filename = ngx_null_string;
+    ngx_str_t                         cache_key = ngx_null_string, filename = ngx_null_string, full_filename = ngx_null_string;
     u_char                           *p;
     size_t                            len = cache->path->name.len + 1 + cache->path->len + 2 * NGX_HTTP_CACHE_KEY_LEN;
     u_char                            filename_data[len + 1];
@@ -314,8 +314,8 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
 
     ngx_memcpy(filename_data, cache->path->name.data, cache->path->name.len);
     filename_data[len] = '\0';
-    filename.data = filename_data;
-    filename.len = len;
+    full_filename.data = filename_data;
+    full_filename.len = len;
 
     if (ngx_atomic_cmp_set(&node->running, 0, 1)) {
         ngx_shmtx_lock(&cache->shpool->mutex);
@@ -329,20 +329,21 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
             ngx_create_hashed_filename(cache->path, filename_data, len);
 
             ngx_memzero(&file, sizeof(ngx_file_t));
-            file.name.data = filename.data;
-            file.name.len = filename.len;
+            file.name.data = full_filename.data;
+            file.name.len = full_filename.len;
             file.log = ev->log;
 
-            file.fd = ngx_open_file(filename.data, NGX_FILE_RDONLY, 0, 0);
+            file.fd = ngx_open_file(full_filename.data, NGX_FILE_RDONLY, 0, 0);
             if (file.fd == NGX_INVALID_FILE) {
                 err = ngx_errno;
                 if (err != NGX_ENOENT) {
-                    ngx_log_error(NGX_LOG_CRIT, ev->log, err, ngx_open_file_n " \"%s\" failed", filename.data);
+                    ngx_log_error(NGX_LOG_CRIT, ev->log, err, "ngx_selective_cache_purge: "ngx_open_file_n " \"%s\" failed", full_filename.data);
                 }
                 continue;
             }
 
             if (ngx_read_file(&file, (u_char *) &h, sizeof(ngx_http_file_cache_header_t), 0) == NGX_ERROR) {
+                ngx_log_error(NGX_LOG_CRIT, ev->log, ngx_errno, "ngx_selective_cache_purge: "ngx_read_file_n " cache file %V failed", &full_filename);
                 continue;
             }
 
@@ -352,11 +353,17 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
             cache_key.data = cache_key_data;
 
             if (ngx_read_file(&file, cache_key_data, cache_key.len, sizeof(ngx_http_file_cache_header_t) + NGX_HTTP_FILE_CACHE_KEY_LEN) == NGX_ERROR){
+                ngx_log_error(NGX_LOG_CRIT, ev->log, ngx_errno, "ngx_selective_cache_purge: "ngx_read_file_n " cache file %V failed", &full_filename);
                 continue;
             }
 
-            filename.len -= cache->path->name.len;
-            filename.data += cache->path->name.len;
+            if (ngx_close_file(file.fd) == NGX_FILE_ERROR) {
+                ngx_log_error(NGX_LOG_CRIT, ev->log, ngx_errno, "ngx_selective_cache_purge: "ngx_close_file_n " cache file %V failed", &full_filename);
+                continue;
+            }
+
+            filename.len = full_filename.len - cache->path->name.len;
+            filename.data = full_filename.data + cache->path->name.len;
 
             ngx_selective_cache_purge_store(ev->log, node->name, node->type, &cache_key, &filename, fcn->expire);
         }
