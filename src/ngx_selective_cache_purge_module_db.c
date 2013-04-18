@@ -34,6 +34,18 @@ ngx_selective_cache_purge_init_db()
     ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
     ngx_shmtx_lock(&shpool->mutex);
 
+    if (sqlite3_config(SQLITE_CONFIG_SINGLETHREAD) != SQLITE_OK) {
+        ngx_shmtx_unlock(&shpool->mutex);
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: library config error - pid %P cannot config sqlite to be single thread", ngx_pid);
+        return NGX_ERROR;
+    }
+
+    if (sqlite3_initialize() != SQLITE_OK) {
+        ngx_shmtx_unlock(&shpool->mutex);
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: library initialize error - pid %P", ngx_pid);
+        return NGX_ERROR;
+    }
+
     if (sqlite3_open_v2((char *) ngx_selective_cache_purge_module_main_conf->database_filename.data, &ngx_selective_cache_purge_worker_data->db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOMUTEX, NULL)) {
         ngx_shmtx_unlock(&shpool->mutex);
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: database open error - pid %P cannot open db: %s", ngx_pid, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
