@@ -15,8 +15,8 @@ An example:
     error_log   logs/nginx-main_error.log debug;
 
     # Development Mode
-    master_process      off;
-    daemon              off;
+    # master_process      off;
+    # daemon              off;
     worker_processes    1;
     worker_rlimit_core  500M;
     working_directory /tmp;
@@ -61,7 +61,8 @@ An example:
             listen          8090;
             server_name     localhost;
 
-            location ~ /purge/.*\.(.*)$ {
+            location ~ /purge/.*(\..*)$ {
+                #purge by extension
                 selective_cache_purge_query "%$1";
             }
 
@@ -91,7 +92,7 @@ An example:
 
 This module requires SQLite 3.7.15.2 or newer. Install it with your favourite package manager - apt-get, yum, brew - or [download](http://www.sqlite.org/download.html) and compile it.
 
-You must build Nginx with your module inside. [Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it (ex.: to ../nginx). You must then run ./configure and with your --add-module pointing to this project as usual, referencing the up-to-date SQLite lib and include if they are not on your default lib and include folders. Something in the lines of:
+[Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it (ex.: to ../nginx). You must then run ./configure with --add-module pointing to this project as usual, referencing the up-to-date SQLite lib and include if they are not on your default lib and include folders. Something in the lines of:
 
     $ ./configure \\
         --with-ld-opt='-L/usr/local/sqlite/3.7.15.2/lib/' \\
@@ -109,7 +110,7 @@ This project uses [nginx_test_helper](https://github.com/wandenberg/nginx_test_h
 
     $ bundle install
 
-And run rspec pointing to where you Nginx binary is (default: /usr/local/nginx/sbin/nginx):
+And run rspec pointing to where your Nginx binary is (default: /usr/local/nginx/sbin/nginx):
 
     $ NGINX_EXEC=../path/to/my/nginx rspec spec/
 
