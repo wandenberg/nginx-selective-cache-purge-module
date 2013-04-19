@@ -183,6 +183,9 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *
     ngx_selective_cache_purge_cache_item_t *cur = NULL;
     ngx_queue_t *selected_items = NULL;
 
+    ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
+
+    ngx_shmtx_lock(&shpool->mutex);
 
     sqlite3_bind_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_BY_CACHE_KEY_WHERE_CACHE_KEY_IDX, (char *) query->data, query->len, NULL);
 
@@ -227,5 +230,8 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *
     }
 
     sqlite3_reset(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt);
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
     return selected_items;
 }
