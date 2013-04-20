@@ -1,18 +1,18 @@
 require "spec_helper"
-require "net/http"
-require "uri"
-
-def response_for(url)
-  uri = URI.parse(url)
-  Net::HTTP.get_response(uri)
-end
 
 describe "Selective Cache Purge Module" do
   let!(:database_file) { File.join "/", "tmp", "cache.db" }
   let!(:proxy_cache_path) { "/tmp/cache" }
-  let!(:config) { NginxConfiguration.default_configuration.merge worker_processes: 4, proxy_cache_path: proxy_cache_path, database_file: database_file, purge_query: "$1%" }
+  let!(:config) do
+    {
+      worker_processes: 4,
+      proxy_cache_path: proxy_cache_path,
+      database_file: database_file,
+      purge_query: "$1%"
+    }
+  end
 
-  let(:db) { db = SQLite3::Database.new database_file }
+  let(:db) { SQLite3::Database.new database_file }
 
   before :each do
     File.unlink database_file if File.exists? database_file
@@ -109,8 +109,8 @@ describe "Selective Cache Purge Module" do
           response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
         end
         remaining_keys = db.execute("select cache_key from selective_cache_purge")
-        remaining_keys.flatten.should_not include *purged_urls
-        remaining_keys.flatten.should include *(cached_urls - purged_urls)
+        remaining_keys.flatten.should have_not_purged_urls(purged_urls)
+        remaining_keys.flatten.should have_purged_urls(cached_urls - purged_urls)
       end
 
       it "should remove the matched entries from the filesystem" do
@@ -148,7 +148,7 @@ describe "Selective Cache Purge Module" do
       it "should return a list of the removed entries after purging" do
         nginx_run_server(config) do
           prepare_cache
-          response_for("http://#{nginx_host}:#{nginx_port}/purge/").body.should include *cached_urls
+          response_for("http://#{nginx_host}:#{nginx_port}/purge/").body.should have_purged_urls(cached_urls)
         end
       end
 
@@ -156,7 +156,7 @@ describe "Selective Cache Purge Module" do
         it "should return an empty list when the query does not match any entries" do
           nginx_run_server(config) do
             prepare_cache
-            response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path").body.should_not include *cached_urls
+            response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path").body.should have_not_purged_urls(cached_urls)
           end
         end
 
@@ -165,8 +165,8 @@ describe "Selective Cache Purge Module" do
             prepare_cache
             purged_urls = ["/index.html","/index2.html"]
             response = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
-            response.body.should include *purged_urls
-            response.body.should_not include *(cached_urls - purged_urls)
+            response.body.should have_purged_urls(purged_urls)
+            response.body.should have_not_purged_urls(cached_urls - purged_urls)
           end
         end
 
@@ -179,8 +179,8 @@ describe "Selective Cache Purge Module" do
               "/resources/r3.jpg"
             ]
             response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
-            response.body.should include *purged_urls
-            response.body.should_not include *(cached_urls - purged_urls)
+            response.body.should have_purged_urls(purged_urls)
+            response.body.should have_not_purged_urls(cached_urls - purged_urls)
           end
         end
       end
