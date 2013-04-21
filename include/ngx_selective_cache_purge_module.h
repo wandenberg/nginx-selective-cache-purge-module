@@ -53,6 +53,12 @@ typedef struct {
     ngx_atomic_t              running;
 } ngx_selective_cache_purge_zone_t;
 
+typedef struct {
+    ngx_queue_t               queue;
+    u_char                    key_dumped[2 * NGX_HTTP_CACHE_KEY_LEN];
+    time_t                    expire;
+} ngx_selective_cache_purge_file_info_t;
+
 // shared memory
 typedef struct {
     ngx_rbtree_t              zones_tree;
