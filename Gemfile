@@ -8,4 +8,5 @@ group :test do
   gem 'em-http-request'
   gem 'sqlite3'
   gem 'debugger'
+  gem 'rubyzip', :require => 'zip/zip'
 end
