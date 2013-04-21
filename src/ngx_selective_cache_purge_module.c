@@ -242,7 +242,9 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_http_request_t *r, ngx_selectiv
         if (rc != NGX_OK) {
             return rc;
         }
+#if NGX_HTTP_CACHE
         fcn = r->cache->node;
+#endif
     }
 
     if (fcn != NULL) {

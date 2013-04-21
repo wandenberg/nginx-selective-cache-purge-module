@@ -262,6 +262,7 @@ ngx_selective_cache_purge_file_cache_lookup(ngx_http_file_cache_t *cache, u_char
 static ngx_int_t
 ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_http_file_cache_t *cache, ngx_str_t *cache_key, u_char *md5_key)
 {
+#if NGX_HTTP_CACHE
     ngx_http_cache_t  *c;
     ngx_str_t         *key;
     ngx_int_t          rc;
@@ -321,6 +322,9 @@ ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_h
     default:
         return NGX_ERROR;
     }
+#else
+    return NGX_OK;
+#endif
 }
 
 
