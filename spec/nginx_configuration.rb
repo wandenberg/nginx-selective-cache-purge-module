@@ -10,6 +10,6 @@ module NginxConfiguration
   end
 
   def self.template_configuration
-    File.open('spec/assets/nginx-test.conf').read
+    File.open(File.expand_path('assets/nginx-test.conf', File.dirname(__FILE__))).read
   end
 end
