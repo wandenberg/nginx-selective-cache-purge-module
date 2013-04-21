@@ -16,6 +16,8 @@ describe "Selective Cache Purge Module" do
 
   before :each do
     File.unlink database_file if File.exists? database_file
+    FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
+    FileUtils.mkdir_p proxy_cache_path
   end
 
   context "database creation" do
