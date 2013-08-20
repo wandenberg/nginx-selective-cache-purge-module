@@ -27,16 +27,14 @@ describe "Selective Cache Purge Module Database Lock" do
       cached_requests_timer = EventMachine::PeriodicTimer.new(0.01) do
         if requests_sent >= number_of_requests
           cached_requests_timer.cancel
+          block.call unless block.nil?
+          EventMachine.stop
         else
           requests_sent += 1
           req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}#{path}/#{requests_sent}/index.html", connect_timeout: 100, inactivity_timeout: 150).get
           req.callback do
             fail("Request failed with error #{req.response_header.status}") if req.response_header.status != 200
             requests_success += 1
-            if requests_success >= requests_sent
-              block.call unless block.nil?
-              EventMachine.stop
-            end
           end
           req.errback do
             fail("Request failed!!! #{req.error}")
