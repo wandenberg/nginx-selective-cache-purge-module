@@ -172,7 +172,7 @@ ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r)
     u_char            *p = NULL;
     ngx_str_t         *key = NULL;
 
-    if (r->cache && (!r->cache->exists || r->cache->updated)) {
+    if (r->cache && (r->cache->node != NULL) && (r->cache->file.name.len > 0) && (!r->cache->exists || r->cache->updated)) {
         key = r->cache->keys.elts;
         for (i = 0; i < r->cache->keys.nelts; i++) {
             len += key[i].len;

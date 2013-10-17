@@ -65,8 +65,44 @@ describe "Selective Cache Purge Module" do
 
     it "should be able to save an entry for status codes other than 200" do
       path = "/not-found/index.html"
-      nginx_run_server(config) do
-        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '404'
+      nginx_run_server(config, :timeout => 60) do |conf|
+        resp_1 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
+        resp_1.code.should eq '404'
+        File.read(conf.access_log).should include("[MISS]")
+
+        sleep 15
+
+        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
+        resp_2.code.should eq '404'
+        File.read(conf.access_log).should include("[HIT]")
+
+        sleep 20
+
+        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
+        resp_2.code.should eq '404'
+        File.read(conf.access_log).should include("[EXPIRED]")
+      end
+      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
+    end
+
+    it "should be able to save an entry when backend is unavailable" do
+      path = "/unavailable"
+      nginx_run_server(config, :timeout => 60) do |conf|
+        resp_1 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
+        resp_1.code.should eq '502'
+        File.read(conf.access_log).should include("[MISS]")
+
+        sleep 15
+
+        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
+        resp_2.code.should eq '502'
+        File.read(conf.access_log).should include("[HIT]")
+
+        sleep 20
+
+        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
+        resp_2.code.should eq '502'
+        File.read(conf.access_log).should include("[MISS]")
       end
       db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
     end
