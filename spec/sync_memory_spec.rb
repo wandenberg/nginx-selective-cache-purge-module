@@ -60,4 +60,22 @@ describe "Selective Cache Purge Module" do
       end
     end
   end
+
+  it "should clear old entries after sync" do
+    db.execute("create table if not exists selective_cache_purge (zone varchar, type varchar, cache_key varchar, filename varchar, expires int, primary key (cache_key, zone, type))")
+    db.execute("insert or replace into selective_cache_purge values ('unkown_zone', 'proxy', '/115/index.html', '/b/65/721a470787d1f40cdb6307c9108de65b', #{Time.now.to_i})")
+    nginx_run_server(config, timeout: 100) do
+      EventMachine.run do
+        EventMachine::PeriodicTimer.new(0.5) do
+          count = db.execute("select count(*) from selective_cache_purge") rescue [[0]]
+          if count[0][0] >= number_of_files_on_cache
+            sleep 1.5
+            count = db.execute("select count(*) from selective_cache_purge where zone = 'unkown_zone'")
+            count[0][0].should eql(0)
+            EventMachine.stop
+          end
+        end
+      end
+    end
+  end
 end

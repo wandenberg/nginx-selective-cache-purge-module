@@ -321,6 +321,7 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
     full_filename.len = len;
 
     if (ngx_trylock(&node->running)) {
+        ngx_selective_cache_purge_mark_entires_as_old();
         ngx_queue_init(&files_info);
 
         ngx_shmtx_lock(&cache->shpool->mutex);
@@ -403,6 +404,7 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
         ngx_selective_cache_purge_timer_reset(cache->loader_sleep * 1.5, &node->sync_database_event);
         ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "ngx_selective_cache_purge: finish a cycle of sync, scheduling one more");
     } else {
+        ngx_selective_cache_purge_remove_old_entries();
         ngx_log_error(NGX_LOG_CRIT, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync from memory to database finished");
     }
 

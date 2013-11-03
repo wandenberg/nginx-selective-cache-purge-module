@@ -27,6 +27,8 @@
 
 #define DELETE_OLD_ENTRIES_SQL "delete from selective_cache_purge where expires < :expires;"
 
+#define SET_ENTRIES_AS_OLD_SQL "update selective_cache_purge set expires = 0;"
+
 
 static ngx_int_t
 ngx_selective_cache_purge_init_db()
@@ -167,6 +169,28 @@ ngx_selective_cache_purge_remove_old_entries()
 
     if (ret != SQLITE_DONE) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not delete entries older than: %ul, msg: %s", expires, sqlite3_errmsg(ngx_selective_cache_purge_worker_data->db));
+        return NGX_ERROR;
+    }
+
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_selective_cache_purge_mark_entires_as_old()
+{
+    int ret;
+    char *err_msg = NULL;
+
+    ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
+
+    ngx_shmtx_lock(&shpool->mutex);
+    ret = sqlite3_exec(ngx_selective_cache_purge_worker_data->db, SET_ENTRIES_AS_OLD_SQL, NULL, 0, &err_msg);
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    if (ret != SQLITE_OK) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not set entries as old: %s", err_msg);
+        sqlite3_free(err_msg);
         return NGX_ERROR;
     }
 
