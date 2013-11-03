@@ -185,11 +185,20 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *
 
     ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
 
-    ngx_shmtx_lock(&shpool->mutex);
-
     sqlite3_bind_text(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt, SELECT_BY_CACHE_KEY_WHERE_CACHE_KEY_IDX, (char *) query->data, query->len, NULL);
 
-    while ((ret = sqlite3_step(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt)) == SQLITE_ROW) {
+    while (1) {
+        ret = sqlite3_step(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt);
+        if (ret == SQLITE_BUSY) {
+            ngx_shmtx_lock(&shpool->mutex);
+            ret = sqlite3_step(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt);
+            ngx_shmtx_unlock(&shpool->mutex);
+        }
+
+        if (ret != SQLITE_ROW) {
+            break;
+        }
+
         if ((cur = (ngx_selective_cache_purge_cache_item_t *) ngx_palloc(r->pool, sizeof(ngx_selective_cache_purge_cache_item_t))) == NULL) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not allocate memory to result list");
             break;
@@ -230,8 +239,6 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, ngx_str_t *
     }
 
     sqlite3_reset(ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt);
-
-    ngx_shmtx_unlock(&shpool->mutex);
 
     return selected_items;
 }

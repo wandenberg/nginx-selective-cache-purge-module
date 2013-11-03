@@ -24,9 +24,10 @@ describe "Selective Cache Purge Module Database Lock" do
     requests_sent = 0
     requests_success = 0
     EventMachine.run do
-      cached_requests_timer = EventMachine::PeriodicTimer.new(0.01) do
+      cached_requests_timer = EventMachine::PeriodicTimer.new(0.001) do
         if requests_sent >= number_of_requests
           cached_requests_timer.cancel
+          sleep 1.5
           block.call unless block.nil?
           EventMachine.stop
         else
@@ -35,10 +36,6 @@ describe "Selective Cache Purge Module Database Lock" do
           req.callback do
             fail("Request failed with error #{req.response_header.status}") if req.response_header.status != 200
             requests_success += 1
-          end
-          req.errback do
-            fail("Request failed!!! #{req.error}")
-            EventMachine.stop
           end
         end
       end
