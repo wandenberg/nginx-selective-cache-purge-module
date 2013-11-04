@@ -11,7 +11,7 @@
 #define INSERT_FILENAME_IDX   4
 #define INSERT_EXPIRES_IDX    5
 
-#define SELECT_BY_CACHE_KEY_SQL "select zone, type, cache_key, filename, expires from selective_cache_purge where cache_key like :cache_key order by zone, type;"
+#define SELECT_BY_CACHE_KEY_SQL "select zone, type, cache_key, filename, expires from selective_cache_purge where cache_key like :cache_key;"
 #define SELECT_ZONE_IDX       0
 #define SELECT_TYPE_IDX       1
 #define SELECT_CACHE_KEY_IDX  2
