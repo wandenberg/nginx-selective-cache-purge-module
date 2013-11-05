@@ -5,7 +5,8 @@ module NginxConfiguration
       :master_process => 'off',
       :daemon => 'off',
       :unknown_value => nil,
-      :return_code => 404
+      :return_code => 404,
+      :additional_config => ''
     }
   end
 

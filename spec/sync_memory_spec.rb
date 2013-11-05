@@ -19,7 +19,9 @@ describe "Selective Cache Purge Module" do
   before :each do
     File.unlink database_file if File.exists? database_file
     FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
+    FileUtils.rm_rf Dir["#{proxy_cache_path}_2/**"]
     FileUtils.mkdir_p proxy_cache_path
+    FileUtils.mkdir_p "#{proxy_cache_path}_2"
 
     Zip::ZipFile.open(File.expand_path('../spec/assets/cache.zip', File.dirname(__FILE__))) do |zipfile|
       zipfile.restore_permissions = true
@@ -54,6 +56,22 @@ describe "Selective Cache Purge Module" do
           if count[0][0] >= number_of_files_on_cache
             timer.cancel
             request_received.should be_within(5).of(request_sent)
+            EventMachine.stop
+          end
+        end
+      end
+    end
+  end
+
+  it "should sync all cache zones" do
+    FileUtils.cp_r Dir["#{proxy_cache_path}/*"], "#{proxy_cache_path}_2"
+    additional_config = "proxy_cache_path #{proxy_cache_path}_2 levels=1:2 keys_zone=zone2:10m inactive=10d max_size=100m loader_files=100 loader_sleep=1;"
+
+    nginx_run_server(config.merge({:additional_config => additional_config}), timeout: 200) do
+      EventMachine.run do
+        EventMachine::PeriodicTimer.new(0.5) do
+          count = db.execute("select count(*) from selective_cache_purge") rescue [[0]]
+          if count[0][0] >= (2 * number_of_files_on_cache)
             EventMachine.stop
           end
         end

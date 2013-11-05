@@ -299,6 +299,7 @@ ngx_selective_cache_purge_database_cleanup_timer_wake_handler(ngx_event_t *ev)
 static void
 ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
 {
+    ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     ngx_selective_cache_purge_zone_t *node = (ngx_selective_cache_purge_zone_t *) ev->data;
     ngx_http_file_cache_t            *cache = (ngx_http_file_cache_t *) node->cache->data;
     ngx_http_file_cache_node_t       *fcn;
@@ -321,7 +322,9 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
     full_filename.len = len;
 
     if (ngx_trylock(&node->running)) {
-        ngx_selective_cache_purge_mark_entires_as_old();
+        if (ngx_atomic_cmp_set(&data->marked_old_entries, 0, 1)) {
+            ngx_selective_cache_purge_mark_entires_as_old();
+        }
         ngx_queue_init(&files_info);
 
         ngx_shmtx_lock(&cache->shpool->mutex);

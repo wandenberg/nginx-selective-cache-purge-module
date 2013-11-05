@@ -240,11 +240,6 @@ ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf)
 static ngx_int_t
 ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
 {
-    if (data) {
-        shm_zone->data = data;
-        return NGX_OK;
-    }
-
     ngx_slab_pool_t *shpool = (ngx_slab_pool_t *) shm_zone->shm.addr;
     ngx_selective_cache_purge_shm_data_t *d;
     ngx_rbtree_node_t                    *sentinel;
@@ -252,6 +247,13 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
     ngx_uint_t                            i;
     ngx_shm_zone_t                       *shm_zones;
     ngx_list_part_t                      *part;
+
+    if (data) {
+        d = (ngx_selective_cache_purge_shm_data_t *) data;
+        d->marked_old_entries = 0;
+        shm_zone->data = data;
+        return NGX_OK;
+    }
 
     if ((d = (ngx_selective_cache_purge_shm_data_t *) ngx_slab_alloc(shpool, sizeof(*d))) == NULL) {
         return NGX_ERROR;
@@ -262,6 +264,7 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         return NGX_ERROR;
     }
     ngx_rbtree_init(&d->zones_tree, sentinel, ngx_selective_cache_purge_rbtree_zones_insert);
+    d->marked_old_entries = 0;
 
     part = (ngx_list_part_t *) &ngx_selective_cache_purge_shared_memory_list->part;
     shm_zones = part->elts;

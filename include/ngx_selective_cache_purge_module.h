@@ -61,6 +61,7 @@ typedef struct {
 
 // shared memory
 typedef struct {
+    ngx_atomic_t              marked_old_entries;
     ngx_rbtree_t              zones_tree;
 } ngx_selective_cache_purge_shm_data_t;
 
