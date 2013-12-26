@@ -1,21 +1,13 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module Database Lock" do
-  let!(:database_file) { File.join "/", "tmp", "cache.db" }
   let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
-    {
-      worker_processes: 4,
-      proxy_cache_path: proxy_cache_path,
-      database_file: database_file,
-      purge_query: "$1%"
-    }
+    { }
   end
 
-  let(:db) { SQLite3::Database.new database_file }
-
   before :each do
-    File.unlink database_file if File.exists? database_file
+    clear_database
     FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
     FileUtils.mkdir_p proxy_cache_path
   end
@@ -47,7 +39,7 @@ describe "Selective Cache Purge Module Database Lock" do
       nginx_run_server(config, timeout: 200) do
         number_of_requests = 200
         run_concurrent_requests_check(number_of_requests) do
-          db.execute("select count(*) from selective_cache_purge").first.should eql [number_of_requests]
+          get_database_entries_for('*').count.should eql(number_of_requests)
         end
       end
     end
@@ -57,7 +49,7 @@ describe "Selective Cache Purge Module Database Lock" do
         number_of_requests = 200
         run_concurrent_requests_check(number_of_requests) do
           run_concurrent_requests_check(number_of_requests, "/purge") do
-            db.execute("select count(*) from selective_cache_purge").first.should eql [0]
+            get_database_entries_for('*').count.should eql(0)
           end
         end
       end

@@ -9,26 +9,35 @@ static ngx_int_t ngx_selective_cache_purge_postconfig(ngx_conf_t *cf);
 static void *ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf);
 static char *ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent);
 static ngx_int_t ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle);
+static void  ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle);
 static void *ngx_selective_cache_purge_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
 static ngx_int_t ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf);
 static ngx_int_t ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data);
 
+static ngx_str_t SERVER_IS_RESTARTING_MESSAGE = ngx_string("Server is restarting, try again ...\n");
+
 ngx_list_t *ngx_selective_cache_purge_shared_memory_list;
 
 static ngx_command_t  ngx_selective_cache_purge_commands[] = {
-    { ngx_string("selective_cache_purge_database"),
+    { ngx_string("selective_cache_purge_redis_host"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_MAIN_CONF_OFFSET,
-      offsetof(ngx_selective_cache_purge_main_conf_t, database_filename),
+      offsetof(ngx_selective_cache_purge_main_conf_t, redis_host),
       NULL },
-    { ngx_string("selective_cache_purge_database_cleanup_interval"),
+    { ngx_string("selective_cache_purge_redis_port"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
+      ngx_conf_set_num_slot,
       NGX_HTTP_MAIN_CONF_OFFSET,
-      offsetof(ngx_selective_cache_purge_main_conf_t, database_cleanup_interval),
+      offsetof(ngx_selective_cache_purge_main_conf_t, redis_port),
+      NULL },
+    { ngx_string("selective_cache_purge_redis_database"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_selective_cache_purge_main_conf_t, redis_database),
       NULL },
     { ngx_string("selective_cache_purge_query"),
       NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
@@ -63,7 +72,7 @@ ngx_module_t  ngx_selective_cache_purge_module = {
     ngx_selective_cache_purge_init_worker,     /* init process */
     NULL,                                      /* init thread */
     NULL,                                      /* exit thread */
-    NULL,                                      /* exit process */
+    ngx_selective_cache_purge_exit_worker,     /* exit process */
     NULL,                                      /* exit master */
     NGX_MODULE_V1_PADDING
 };
@@ -80,8 +89,9 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     }
 
     conf->enabled = 0;
-    conf->database_filename.data = NULL;
-    conf->database_cleanup_interval = NGX_CONF_UNSET_MSEC;
+    conf->redis_host.data = NULL;
+    conf->redis_port = NGX_CONF_UNSET_UINT;
+    conf->redis_database = NGX_CONF_UNSET_UINT;
 
     ngx_selective_cache_purge_module_main_conf = conf;
 
@@ -95,16 +105,17 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 #ifdef NGX_HTTP_CACHE
     ngx_selective_cache_purge_main_conf_t     *conf = parent;
 
-    if (conf->database_filename.data != NULL) {
+    if (conf->redis_host.data != NULL) {
 
-        ngx_str_t *database_filename = ngx_selective_cache_purge_alloc_str(cf->pool, conf->database_filename.len);
-        ngx_snprintf(database_filename->data, conf->database_filename.len, "%V", &conf->database_filename);
-        conf->database_filename.data = database_filename->data;
+        ngx_str_t *redis_host = ngx_selective_cache_purge_alloc_str(cf->pool, conf->redis_host.len);
+        ngx_snprintf(redis_host->data, conf->redis_host.len, "%V", &conf->redis_host);
+        conf->redis_host.data = redis_host->data;
 
         conf->enabled = 1;
     }
 
-    ngx_conf_init_msec_value(conf->database_cleanup_interval, NGX_SELECTIVE_CACHE_PURGE_DATABASE_CLEANUP_INTERVAL);
+    ngx_conf_merge_uint_value(conf->redis_port, conf->redis_port, 6379);
+    ngx_conf_merge_uint_value(conf->redis_database, conf->redis_database, 0);
 #endif
 
     return NGX_CONF_OK;
@@ -122,19 +133,46 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
         return NGX_OK;
     }
 
-    ngx_selective_cache_purge_worker_data = ngx_pcalloc(cycle->pool, sizeof(ngx_selective_cache_purge_worker_data_t));
-    ngx_selective_cache_purge_worker_data->db = NULL;
-    ngx_selective_cache_purge_worker_data->delete_stmt = NULL;
-    ngx_selective_cache_purge_worker_data->delete_old_entries_stmt = NULL;
-    ngx_selective_cache_purge_worker_data->insert_stmt = NULL;
-    ngx_selective_cache_purge_worker_data->select_by_cache_key_stmt = NULL;
 
-    ngx_selective_cache_purge_timer_set(ngx_selective_cache_purge_module_main_conf->database_cleanup_interval, &ngx_selective_cache_purge_database_cleanup_event, ngx_selective_cache_purge_database_cleanup_timer_wake_handler, 1);
+    if (ngx_selective_cache_purge_init_db(cycle) != NGX_OK) {
+        return NGX_ERROR;
+    }
 
-    ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
-    ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr, ngx_selective_cache_purge_start_sync_database_timer);
+    if ((purge_requests_queue = ngx_pcalloc(cycle->pool, sizeof(ngx_queue_t))) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "ngx_selective_cache_purge: could not alloc memory to purge requests queue");
+        return NGX_ERROR;
+    }
+    ngx_queue_init(purge_requests_queue);
 
-    return ngx_selective_cache_purge_init_db();
+    ngx_selective_cache_purge_sync_memory_to_database();
+
+    return NGX_OK;
+}
+
+
+static void
+ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle)
+{
+    if ((ngx_selective_cache_purge_module_main_conf == NULL) || !ngx_selective_cache_purge_module_main_conf->enabled) {
+        return;
+    }
+
+    if ((ngx_process != NGX_PROCESS_SINGLE) && (ngx_process != NGX_PROCESS_WORKER)) {
+        return;
+    }
+
+    ngx_queue_t                      *q;
+    while (!ngx_queue_empty(purge_requests_queue) && (q = ngx_queue_last(purge_requests_queue))) {
+        ngx_selective_cache_purge_request_ctx_t *ctx = ngx_queue_data(q, ngx_selective_cache_purge_request_ctx_t, queue);
+
+        ngx_selective_cache_purge_force_close_context(&ctx->context);
+        ngx_selective_cache_purge_send_response(ctx->request, SERVER_IS_RESTARTING_MESSAGE.data, SERVER_IS_RESTARTING_MESSAGE.len, NGX_HTTP_PRECONDITION_FAILED, &CONTENT_TYPE);
+        ngx_close_connection(ctx->request->connection);
+
+        ngx_queue_remove(q);
+    }
+
+    ngx_selective_cache_purge_finish_db(cycle);
 }
 
 
@@ -250,21 +288,21 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
 
     if (data) {
         d = (ngx_selective_cache_purge_shm_data_t *) data;
-        d->marked_old_entries = 0;
-        shm_zone->data = data;
-        return NGX_OK;
+    } else {
+        if ((d = (ngx_selective_cache_purge_shm_data_t *) ngx_slab_alloc(shpool, sizeof(*d))) == NULL) {
+            return NGX_ERROR;
+        }
+
+        if ((sentinel = ngx_slab_alloc(shpool, sizeof(*sentinel))) == NULL) {
+            return NGX_ERROR;
+        }
+
+        ngx_rbtree_init(&d->zones_tree, sentinel, ngx_selective_cache_purge_rbtree_zones_insert);
     }
 
-    if ((d = (ngx_selective_cache_purge_shm_data_t *) ngx_slab_alloc(shpool, sizeof(*d))) == NULL) {
-        return NGX_ERROR;
-    }
     shm_zone->data = d;
 
-    if ((sentinel = ngx_slab_alloc(shpool, sizeof(*sentinel))) == NULL) {
-        return NGX_ERROR;
-    }
-    ngx_rbtree_init(&d->zones_tree, sentinel, ngx_selective_cache_purge_rbtree_zones_insert);
-    d->marked_old_entries = 0;
+    d->syncing = 0;
 
     part = (ngx_list_part_t *) &ngx_selective_cache_purge_shared_memory_list->part;
     shm_zones = part->elts;
@@ -283,15 +321,20 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         if (shm_zones[i].tag != NULL) {
             ngx_str_t *type = ngx_selective_cache_purge_get_module_type_by_tag(shm_zones[i].tag);
             if (type != NULL) {
-                if ((zone = ngx_slab_alloc(shpool, sizeof(*zone))) == NULL) {
-                    return NGX_ERROR;
+                zone = ngx_selective_cache_purge_find_zone(&shm_zones[i].shm.name, type);
+                if (zone != NULL) {
+                    ngx_rbtree_delete(&d->zones_tree, &zone->node);
+                } else {
+                    if ((zone = ngx_slab_alloc(shpool, sizeof(*zone))) == NULL) {
+                        return NGX_ERROR;
+                    }
                 }
 
+                zone->sync_database_event = NULL;
                 zone->cache = &shm_zones[i];
                 zone->name = &shm_zones[i].shm.name;
                 zone->type = type;
                 zone->node.key = ngx_crc32_short(zone->name->data, zone->name->len);
-                zone->running = 0;
 
                 ngx_rbtree_insert(&d->zones_tree, &zone->node);
             }

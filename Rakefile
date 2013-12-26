@@ -3,7 +3,7 @@
 require 'rake'
 
 # Set up gems listed in the Gemfile.
-ENV['BUNDLE_GEMFILE'] ||= File.expand_path('./Gemfile', File.dirname(__FILE__))
+ENV['BUNDLE_GEMFILE'] ||= File.expand_path('Gemfile', File.dirname(__FILE__))
 require 'bundler/setup' if File.exists?(ENV['BUNDLE_GEMFILE'])
 Bundler.require(:default, :test) if defined?(Bundler)
 
@@ -31,7 +31,7 @@ def make(opts={})
   sh "make #{opts[:targets].join(' ')} #{makefile_opt}"
 end
 
-task :default => :build
+task default: :build
 
 task :check_nginx_src_available do
   unless Dir.exists? nginx_src_dir
@@ -41,16 +41,16 @@ task :check_nginx_src_available do
 end
 
 desc "Cleans up all objects"
-task :clean => [:check_nginx_src_available] do
+task clean: [:check_nginx_src_available] do
   chdir nginx_src_dir do
     make targets: [:clean]
   end
 end
 
 desc "Configure"
-task :configure => [:check_nginx_src_available] do
+task configure: [:check_nginx_src_available] do
   chdir nginx_src_dir do
-    sh "./configure --prefix=#{nginx_prefix_dir} --add-module=#{ENV['PWD']} --with-debug #{ENV["NGINX_CONFIGURE_EXTRA"]}"
+    sh "./configure --prefix=#{nginx_prefix_dir} --add-module=#{src_dir} --with-debug #{ENV["NGINX_CONFIGURE_EXTRA"]}"
   end
 end
 
@@ -67,20 +67,20 @@ file '#{obj_dir}/nginx' => [nginx_makefile] do
 end
 
 desc "Build nginx"
-task :build => ['#{obj_dir}/nginx']
+task build: ['#{obj_dir}/nginx']
 
 desc "Rebuild nginx"
-task :rebuild => [:clean, :build]
+task rebuild: [:clean, :build]
 
 modules = FileList.new("#{obj_dir}/addon/**/*.o")
 
 desc "Clean modules"
-task :clean_modules => [nginx_makefile] do
+task clean_modules: [nginx_makefile] do
   sh "rm -f #{modules.join(' ')}"
 end
 
 desc "Rebuild modules"
-task :rebuild_modules => [:clean_modules, :build]
+task rebuild_modules: [:clean_modules, :build]
 
 # desc "Run tests"
-task :spec => [:build]
+task spec: [:build]

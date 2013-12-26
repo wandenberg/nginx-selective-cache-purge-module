@@ -1,7 +1,7 @@
 #include <ngx_selective_cache_purge_module_utils.h>
 
 
-static ngx_str_t *
+ngx_str_t *
 ngx_selective_cache_purge_alloc_str(ngx_pool_t *pool, uint len)
 {
     ngx_str_t *aux = (ngx_str_t *) ngx_pcalloc(pool, sizeof(ngx_str_t) + len + 1);
@@ -58,7 +58,7 @@ ngx_selective_cache_purge_send_header(ngx_http_request_t *r, size_t len, ngx_uin
 }
 
 
-static ngx_int_t
+ngx_int_t
 ngx_selective_cache_purge_send_response(ngx_http_request_t *r, u_char *data, size_t len, ngx_uint_t status, ngx_str_t *content_type)
 {
     ngx_int_t rc;
@@ -81,7 +81,7 @@ ngx_selective_cache_purge_send_response(ngx_http_request_t *r, u_char *data, siz
 }
 
 
-static ngx_str_t *
+ngx_str_t *
 ngx_selective_cache_purge_get_module_type_by_tag(void *tag)
 {
     ngx_str_t *type = NULL;
@@ -205,6 +205,22 @@ ngx_rbtree_generic_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_
 
 
 static int
+ngx_selective_cache_purge_compare_rbtree_file_info_key(const ngx_rbtree_node_t *v_node, const void *v_key)
+{
+    ngx_selective_cache_purge_cache_item_t *node = (ngx_selective_cache_purge_cache_item_t *) v_node;
+    return ngx_memcmp(v_key, node->key, NGX_HTTP_CACHE_KEY_LEN - sizeof(ngx_rbtree_key_t));
+}
+
+
+static int
+ngx_selective_cache_purge_compare_rbtree_file_info_nodes(const ngx_rbtree_node_t *v_left, const ngx_rbtree_node_t *v_right)
+{
+    ngx_selective_cache_purge_cache_item_t *right = (ngx_selective_cache_purge_cache_item_t *) v_right;
+    return ngx_selective_cache_purge_compare_rbtree_file_info_key(v_left, right->key);
+}
+
+
+static int
 ngx_selective_cache_purge_compare_rbtree_zones_node(const ngx_rbtree_node_t *v_left, const ngx_rbtree_node_t *v_right)
 {
     ngx_selective_cache_purge_zone_t *left = (ngx_selective_cache_purge_zone_t *) v_left, *right = (ngx_selective_cache_purge_zone_t *) v_right;
@@ -225,14 +241,21 @@ ngx_selective_cache_purge_compare_rbtree_zone_type(const ngx_rbtree_node_t *v_no
 }
 
 
-static void
+void
 ngx_selective_cache_purge_rbtree_zones_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel)
 {
     ngx_rbtree_generic_insert(temp, node, sentinel, ngx_selective_cache_purge_compare_rbtree_zones_node);
 }
 
 
-static ngx_selective_cache_purge_zone_t *
+void
+ngx_selective_cache_purge_rbtree_file_info_insert(ngx_rbtree_node_t *temp, ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel)
+{
+    ngx_rbtree_generic_insert(temp, node, sentinel, ngx_selective_cache_purge_compare_rbtree_file_info_nodes);
+}
+
+
+ngx_selective_cache_purge_zone_t *
 ngx_selective_cache_purge_find_zone(ngx_str_t *zone, ngx_str_t *type)
 {
     ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
@@ -250,7 +273,14 @@ ngx_selective_cache_purge_compare_rbtree_file_cache_key(const ngx_rbtree_node_t 
 }
 
 
-static ngx_http_file_cache_node_t *
+ngx_selective_cache_purge_cache_item_t *
+ngx_selective_cache_purge_file_info_lookup(ngx_rbtree_t *tree, ngx_http_file_cache_node_t *fcn)
+{
+    return (ngx_selective_cache_purge_cache_item_t *) ngx_rbtree_generic_find(tree, fcn->node.key, fcn->key, ngx_selective_cache_purge_compare_rbtree_file_info_key);
+}
+
+
+ngx_http_file_cache_node_t *
 ngx_selective_cache_purge_file_cache_lookup(ngx_http_file_cache_t *cache, u_char *key)
 {
     ngx_rbtree_key_t             node_key;
@@ -259,7 +289,7 @@ ngx_selective_cache_purge_file_cache_lookup(ngx_http_file_cache_t *cache, u_char
 }
 
 
-static ngx_int_t
+ngx_int_t
 ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_http_file_cache_t *cache, ngx_str_t *cache_key, u_char *md5_key)
 {
 #if NGX_HTTP_CACHE
@@ -328,24 +358,16 @@ ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_h
 }
 
 
-static void
+void
 ngx_selective_cache_purge_timer_set(ngx_msec_t timer_interval, ngx_event_t *event, ngx_event_handler_pt event_handler, ngx_flag_t start_timer)
 {
     if ((timer_interval != NGX_CONF_UNSET_MSEC) && start_timer) {
-        ngx_slab_pool_t     *shpool = (ngx_slab_pool_t *) ngx_selective_cache_purge_shm_zone->shm.addr;
-
-        if (event->handler == NULL) {
-            ngx_shmtx_lock(&shpool->mutex);
-            if (event->handler == NULL) {
-                event->handler = event_handler;
-                if (event->data == NULL) {
-                    event->data = event; //set event as data to avoid error when running on debug mode (on log event)
-                }
-                event->log = ngx_cycle->log;
-                ngx_selective_cache_purge_timer_reset(timer_interval, event);
-            }
-            ngx_shmtx_unlock(&shpool->mutex);
+        if (event->data == NULL) {
+            event->data = event; //set event as data to avoid error when running on debug mode (on log event)
         }
+        event->handler = event_handler;
+        event->log = ngx_cycle->log;
+        ngx_selective_cache_purge_timer_reset(timer_interval, event);
     }
 }
 
@@ -363,17 +385,17 @@ ngx_selective_cache_purge_timer_reset(ngx_msec_t timer_interval, ngx_event_t *ti
 
 
 static void
-ngx_selective_cache_purge_rbtree_walker(ngx_rbtree_t *tree, ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool, ngx_int_t (*apply) (ngx_rbtree_node_t *node, ngx_slab_pool_t *shpool))
+ngx_selective_cache_purge_rbtree_walker(ngx_rbtree_t *tree, ngx_rbtree_node_t *node, void *data, ngx_int_t (*apply) (ngx_rbtree_node_t *node, void *data))
 {
     ngx_rbtree_node_t           *sentinel = tree->sentinel;
 
     if ((node != NULL) && (node != sentinel)) {
-        apply(node, shpool);
+        apply(node, data);
         if (node->left != NULL) {
-            ngx_selective_cache_purge_rbtree_walker(tree, node->left, shpool, apply);
+            ngx_selective_cache_purge_rbtree_walker(tree, node->left, data, apply);
         }
         if (node->right != NULL) {
-            ngx_selective_cache_purge_rbtree_walker(tree, node->right, shpool, apply);
+            ngx_selective_cache_purge_rbtree_walker(tree, node->right, data, apply);
         }
     }
 }

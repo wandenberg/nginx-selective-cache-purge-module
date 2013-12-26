@@ -1,43 +1,15 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module" do
-  let!(:database_file) { File.join "/", "tmp", "cache.db" }
   let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
-    {
-      worker_processes: 4,
-      proxy_cache_path: proxy_cache_path,
-      database_file: database_file,
-      purge_query: "$1%"
-    }
+    { }
   end
-
-  let(:db) { SQLite3::Database.new database_file }
 
   before :each do
-    File.unlink database_file if File.exists? database_file
+    clear_database
     FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
     FileUtils.mkdir_p proxy_cache_path
-  end
-
-  context "database creation" do
-    it "should create the database file" do
-      nginx_test_configuration(config)
-      File.exists?(database_file).should be_true
-    end
-
-    context "displaying errors" do
-      it "should show an error message when database file cannot be created" do
-        error_config = config.merge database_file: "/path/to/missing/folder"
-        nginx_test_configuration(error_config).should include "cannot open db: unable to open database file"
-      end
-
-      it "should show an error message when database file already exists but is invalid" do
-        File.open(database_file, 'w') { |f| f.write "somerandomstring" }
-        nginx_test_configuration(config).should include "ngx_selective_cache_purge: couldn't prepare stmt for insert: disk I/O error"
-      end
-
-    end
   end
 
   context "when caching" do
@@ -52,7 +24,7 @@ describe "Selective Cache Purge Module" do
       nginx_run_server(config) do
         response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '200'
       end
-      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should be_empty
+      get_database_entries_for(path).should be_empty
     end
 
     it "should save an entry after caching" do
@@ -60,12 +32,12 @@ describe "Selective Cache Purge Module" do
       nginx_run_server(config) do
         response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '200'
       end
-      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
+      get_database_entries_for(path).should_not be_empty
     end
 
     it "should be able to save an entry for status codes other than 200" do
       path = "/not-found/index.html"
-      nginx_run_server(config, :timeout => 60) do |conf|
+      nginx_run_server(config, timeout: 60) do |conf|
         resp_1 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
         resp_1.code.should eq '404'
         File.read(conf.access_log).should include("[MISS]")
@@ -82,12 +54,12 @@ describe "Selective Cache Purge Module" do
         resp_2.code.should eq '404'
         File.read(conf.access_log).should include("[EXPIRED]")
       end
-      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
+      get_database_entries_for(path).should_not be_empty
     end
 
     it "should be able to save an entry when backend is unavailable" do
       path = "/unavailable"
-      nginx_run_server(config, :timeout => 60) do |conf|
+      nginx_run_server(config, timeout: 60) do |conf|
         resp_1 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
         resp_1.code.should eq '502'
         File.read(conf.access_log).should include("[MISS]")
@@ -104,7 +76,7 @@ describe "Selective Cache Purge Module" do
         resp_2.code.should eq '502'
         File.read(conf.access_log).should include("[MISS]")
       end
-      db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should_not be_empty
+      get_database_entries_for(path).should_not be_empty
     end
   end
 
@@ -146,7 +118,7 @@ describe "Selective Cache Purge Module" do
           prepare_cache
           response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
         end
-        remaining_keys = db.execute("select cache_key from selective_cache_purge")
+        remaining_keys = get_database_entries_for('*')
         remaining_keys.flatten.should have_not_purged_urls(purged_urls)
         remaining_keys.flatten.should have_purged_urls(cached_urls - purged_urls)
       end
@@ -156,7 +128,7 @@ describe "Selective Cache Purge Module" do
         purged_files = []
         nginx_run_server(config) do
           prepare_cache
-          purged_files = db.execute("select filename from selective_cache_purge where cache_key like 'index%'").flatten
+          purged_files = get_database_entries_for('index%').flatten
           purged_files.each do |f|
             File.exists?("#{proxy_cache_path}#{f}").should be_true
           end
@@ -180,7 +152,7 @@ describe "Selective Cache Purge Module" do
           prepare_cache
           response_for("http://#{nginx_host}:#{nginx_port}/purge#{path}").code.should eq '200'
         end
-        db.execute("select * from selective_cache_purge where cache_key = '#{path}'").should be_empty
+        get_database_entries_for(path).should be_empty
       end
 
       it "should return a list of the removed entries after purging" do

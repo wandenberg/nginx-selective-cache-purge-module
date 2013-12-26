@@ -1,23 +1,15 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module" do
-  let!(:database_file) { File.join "/", "tmp", "cache.db" }
   let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
-    {
-      worker_processes: 4,
-      proxy_cache_path: proxy_cache_path,
-      database_file: database_file,
-      purge_query: "$1%"
-    }
+    { }
   end
-
-  let(:db) { SQLite3::Database.new database_file }
 
   let(:number_of_files_on_cache) { 500 }
 
   before :each do
-    File.unlink database_file if File.exists? database_file
+    clear_database
     FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
     FileUtils.rm_rf Dir["#{proxy_cache_path}_2/**"]
     FileUtils.mkdir_p proxy_cache_path
@@ -52,8 +44,8 @@ describe "Selective Cache Purge Module" do
         end
 
         EventMachine::PeriodicTimer.new(0.5) do
-          count = db.execute("select count(*) from selective_cache_purge") rescue [[0]]
-          if count[0][0] >= number_of_files_on_cache
+          count = get_database_entries_for('*').count
+          if count >= number_of_files_on_cache
             timer.cancel
             request_received.should be_within(5).of(request_sent)
             EventMachine.stop
@@ -67,11 +59,11 @@ describe "Selective Cache Purge Module" do
     FileUtils.cp_r Dir["#{proxy_cache_path}/*"], "#{proxy_cache_path}_2"
     additional_config = "proxy_cache_path #{proxy_cache_path}_2 levels=1:2 keys_zone=zone2:10m inactive=10d max_size=100m loader_files=100 loader_sleep=1;"
 
-    nginx_run_server(config.merge({:additional_config => additional_config}), timeout: 200) do
+    nginx_run_server(config.merge({additional_config: additional_config}), timeout: 200) do
       EventMachine.run do
         EventMachine::PeriodicTimer.new(0.5) do
-          count = db.execute("select count(*) from selective_cache_purge") rescue [[0]]
-          if count[0][0] >= (2 * number_of_files_on_cache)
+          count = get_database_entries_for('*').count
+          if count >= (2 * number_of_files_on_cache)
             EventMachine.stop
           end
         end
@@ -80,16 +72,16 @@ describe "Selective Cache Purge Module" do
   end
 
   it "should clear old entries after sync" do
-    db.execute("create table if not exists selective_cache_purge (zone varchar, type varchar, cache_key varchar, filename varchar, expires int, primary key (cache_key, zone, type))")
-    db.execute("insert or replace into selective_cache_purge values ('unkown_zone', 'proxy', '/115/index.html', '/b/65/721a470787d1f40cdb6307c9108de65b', #{Time.now.to_i})")
+    insert_entry_on_database('unkown_zone', 'proxy', '/115/index.html', '/b/65/721a470787d1f40cdb6307c9108de65b', Time.now.to_i + 600)
+    insert_entry_on_database('zone', 'proxy', '/old_file/index.html', '/f/26/079ed7046775b65ab8983b26750e426f', Time.now.to_i + 600)
     nginx_run_server(config, timeout: 100) do
       EventMachine.run do
         EventMachine::PeriodicTimer.new(0.5) do
-          count = db.execute("select count(*) from selective_cache_purge") rescue [[0]]
-          if count[0][0] >= number_of_files_on_cache
+          count = get_database_entries_for('*').count
+          if count >= number_of_files_on_cache
             sleep 1.5
-            count = db.execute("select count(*) from selective_cache_purge where zone = 'unkown_zone'")
-            count[0][0].should eql(0)
+            get_database_entries_for_zone('unkown_zone').count.should eql(0)
+            get_database_entries_for_zone('zone').count.should eql(number_of_files_on_cache)
             EventMachine.stop
           end
         end

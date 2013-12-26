@@ -1,12 +1,17 @@
 module NginxConfiguration
   def self.default_configuration
     {
-      :disable_start_stop_server => false,
-      :master_process => 'off',
-      :daemon => 'off',
-      :unknown_value => nil,
-      :return_code => 404,
-      :additional_config => ''
+      disable_start_stop_server: false,
+      master_process: 'off',
+      daemon: 'off',
+      unknown_value: nil,
+      return_code: 404,
+      additional_config: '',
+      worker_processes: 4,
+      proxy_cache_path: "/tmp/cache",
+      redis_host: redis_host,
+      redis_database: redis_database,
+      purge_query: "$1%"
     }
   end
 
