@@ -193,6 +193,30 @@ describe "Selective Cache Purge Module" do
             response.body.should have_not_purged_urls(cached_urls - purged_urls)
           end
         end
+
+        it "should not cause md5 collision when the isn't on memory" do
+          nginx_run_server(config) do
+            prepare_cache
+          end
+
+          nginx_run_server(config) do |conf|
+            error_log_pre = File.readlines(conf.error_log)
+
+            purged_urls = [
+              "/resources/r1.jpg",
+              "/resources/r2.jpg",
+              "/resources/r3.jpg"
+            ]
+
+            response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
+
+            error_log_pos = File.readlines(conf.error_log)
+            (error_log_pos - error_log_pre).join.should_not include("md5 collision")
+
+            response.body.should have_purged_urls(purged_urls)
+            response.body.should have_not_purged_urls(cached_urls - purged_urls)
+          end
+        end
       end
     end
   end

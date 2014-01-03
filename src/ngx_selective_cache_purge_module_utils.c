@@ -298,22 +298,18 @@ ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_h
     ngx_int_t          rc;
 
     c = r->cache;
-    if (c == NULL) {
-        c = ngx_pcalloc(r->pool, sizeof(ngx_http_cache_t));
-        if (c == NULL) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to ngx_http_cache_t structure");
-            return NGX_ERROR;
-        }
-
-        rc = ngx_array_init(&c->keys, r->pool, 1, sizeof(ngx_str_t));
-        if (rc != NGX_OK) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to keys array");
-            return NGX_ERROR;
-        }
-    } else {
-        ngx_array_destroy(&c->keys);
+    if ((c == NULL) && (c = ngx_pcalloc(r->pool, sizeof(ngx_http_cache_t))) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to ngx_http_cache_t structure");
+        return NGX_ERROR;
     }
 
+    ngx_memzero(c, sizeof(ngx_http_cache_t));
+
+    rc = ngx_array_init(&c->keys, r->pool, 1, sizeof(ngx_str_t));
+    if (rc != NGX_OK) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to keys array");
+        return NGX_ERROR;
+    }
 
     key = ngx_array_push(&c->keys);
     if (key == NULL) {
