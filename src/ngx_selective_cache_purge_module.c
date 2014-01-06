@@ -351,6 +351,8 @@ ngx_selective_cache_purge_sync_memory_to_database(void)
 
     ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     if (ngx_trylock(&data->syncing)) {
+        ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process started");
+
         ngx_selective_cache_purge_force_close_context(&sync_contexts[ngx_process_slot]);
         data->zones = 0;
         data->zones_to_sync = 0;
@@ -410,6 +412,7 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
     ngx_queue_t                      *q;
     u_char                           *p;
     ngx_flag_t                        loading = 0;
+    ngx_uint_t                        count = 0;
 
     if (ngx_exiting || (data == NULL) || (cache == NULL)) {
         return;
@@ -419,8 +422,18 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
 
     ngx_shmtx_lock(&cache->shpool->mutex);
     loading = cache->sh->cold || cache->sh->loading;
-    for (q = ngx_queue_last(&cache->sh->queue); node->read_memory && (q != ngx_queue_sentinel(&cache->sh->queue)); q = ngx_queue_prev(q)) {
+    for (q = ngx_queue_head(&cache->sh->queue); node->read_memory && (q != ngx_queue_sentinel(&cache->sh->queue)); q = ngx_queue_next(q)) {
         fcn = ngx_queue_data(q, ngx_http_file_cache_node_t, queue);
+
+        if (loading && (node->last != NULL) && (node->last < fcn)) {
+            continue;
+        }
+
+        node->last = fcn;
+        if (loading && (count++ >= 10000)) {
+            break;
+        }
+
         ngx_selective_cache_purge_cache_item_t *ci = NULL;
         if ((ci = ngx_selective_cache_purge_file_info_lookup(&node->files_info_tree, fcn)) == NULL) {
             if ((ci = ngx_pcalloc(sync_temp_pool[ngx_process_slot], sizeof(ngx_selective_cache_purge_cache_item_t))) == NULL) {
@@ -443,6 +456,7 @@ ngx_selective_cache_purge_sync_database_timer_wake_handler(ngx_event_t *ev)
             node->count++;
         } else if (!loading && (ci->expire < 0)) {
             ci->expire = fcn->expire;
+            ngx_rbtree_delete(&node->files_info_tree, &ci->node);
             ngx_queue_remove(&ci->queue);
             ngx_queue_insert_tail(&data->files_info_to_renew_queue, &ci->queue);
         }

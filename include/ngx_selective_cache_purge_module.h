@@ -55,6 +55,7 @@ typedef struct {
     ngx_flag_t                read_memory;
     ngx_uint_t                count;
     void                     *context;
+    ngx_http_file_cache_node_t *last;
 } ngx_selective_cache_purge_zone_t;
 
 // shared memory
