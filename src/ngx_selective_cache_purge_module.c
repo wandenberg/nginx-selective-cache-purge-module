@@ -6,7 +6,7 @@ ngx_str_t        *ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r)
 void              ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t *cache_key);
 ngx_int_t         ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry, void **context);
 void              ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r);
-static ngx_int_t  ngx_selective_cache_purge_send_purge_response(ngx_http_request_t *r);
+void              ngx_selective_cache_purge_send_purge_response(void *d);
 static void       ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r);
 static void       ngx_selective_cache_purge_force_remove(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_organize_entries(ngx_selective_cache_purge_shm_data_t *data);
@@ -105,6 +105,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     }
 
     r->main->count++;
+    r->read_event_handler = ngx_http_test_reading;
 
     if (vv_cache_key.len > 0) {
         ctx->purge_query.data = vv_cache_key.data;
@@ -161,13 +162,14 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
         }
     }
 
-    ngx_http_finalize_request(r, ngx_selective_cache_purge_send_purge_response(r));
+    ngx_selective_cache_purge_barrier_execution(conf, &ctx->context, r, &ngx_selective_cache_purge_send_purge_response);
 }
 
 
-static ngx_int_t
-ngx_selective_cache_purge_send_purge_response(ngx_http_request_t *r)
+void
+ngx_selective_cache_purge_send_purge_response(void *d)
 {
+    ngx_http_request_t                      *r = d;
     ngx_selective_cache_purge_request_ctx_t *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     ngx_selective_cache_purge_cache_item_t  *entry;
     ngx_queue_t                             *cur;
@@ -176,7 +178,9 @@ ngx_selective_cache_purge_send_purge_response(ngx_http_request_t *r)
 
     if (ctx->remove_any_entry) {
         if (r->method == NGX_HTTP_HEAD) {
-            return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_OK, &CONTENT_TYPE);
+            rc = ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_OK, &CONTENT_TYPE);
+            ngx_http_finalize_request(r, rc);
+            return;
         }
 
         r->headers_out.status = NGX_HTTP_OK;
@@ -186,7 +190,8 @@ ngx_selective_cache_purge_send_purge_response(ngx_http_request_t *r)
         r->headers_out.content_type_len = CONTENT_TYPE.len;
         rc = ngx_http_send_header(r);
         if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-            return rc;
+            ngx_http_finalize_request(r, rc);
+            return;
         }
 
         response = ngx_selective_cache_purge_alloc_str(r->pool, ctx->purge_query.len + OK_MESSAGE.len - 2); // -2 for the %V format
@@ -205,13 +210,16 @@ ngx_selective_cache_purge_send_purge_response(ngx_http_request_t *r)
             }
         }
 
-        return ngx_selective_cache_purge_send_response_text(r, LF_SEPARATOR.data, LF_SEPARATOR.len, 1);
+        rc = ngx_selective_cache_purge_send_response_text(r, LF_SEPARATOR.data, LF_SEPARATOR.len, 1);
+        ngx_http_finalize_request(r, rc);
+        return;
     }
 
     // No entries were found
     response = ngx_selective_cache_purge_alloc_str(r->pool, ctx->purge_query.len + NOT_FOUND_MESSAGE.len - 2); // -2 for the %V format
     ngx_sprintf(response->data, (char *) NOT_FOUND_MESSAGE.data, &ctx->purge_query);
-    return ngx_selective_cache_purge_send_response(r, response->data, response->len, NGX_HTTP_NOT_FOUND, &CONTENT_TYPE);
+    rc = ngx_selective_cache_purge_send_response(r, response->data, response->len, NGX_HTTP_NOT_FOUND, &CONTENT_TYPE);
+    ngx_http_finalize_request(r, rc);
 }
 
 
@@ -536,7 +544,7 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
 
     if (ctx != NULL) {
         ngx_queue_remove(&ctx->queue);
-        ngx_selective_cache_purge_close_context(&ctx->context);
+        ngx_selective_cache_purge_force_close_context(&ctx->context);
     }
 }
 
