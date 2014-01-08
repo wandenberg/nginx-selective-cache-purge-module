@@ -214,6 +214,8 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_selective_cache_purge_main_con
         return;
     }
 
+    ctx->purging = 1;
+
     c->data = r;
 
     while ((pos = ngx_strnstr(ctx->purge_query.data, "%", ctx->purge_query.len)) != NULL) {

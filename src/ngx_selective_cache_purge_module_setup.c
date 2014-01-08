@@ -143,6 +143,7 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
         return NGX_ERROR;
     }
     ngx_queue_init(purge_requests_queue);
+    purging[ngx_process_slot] = 0;
 
     ngx_selective_cache_purge_sync_memory_to_database();
 

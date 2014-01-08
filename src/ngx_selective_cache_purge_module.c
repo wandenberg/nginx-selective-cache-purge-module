@@ -74,6 +74,8 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
 
     ctx->context = NULL;
     ctx->remove_any_entry = 0;
+    ctx->force = 0;
+    ctx->purging = 0;
     ctx->request = r;
     ngx_queue_insert_tail(purge_requests_queue, &ctx->queue);
 
@@ -108,13 +110,16 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     r->read_event_handler = ngx_http_test_reading;
 
     if (vv_cache_key.len > 0) {
+        ctx->force = 1;
         ctx->purge_query.data = vv_cache_key.data;
         ctx->purge_query.len = vv_cache_key.len;
         ngx_selective_cache_purge_force_remove(r);
     } else {
         ctx->purge_query.data = vv_purge_query.data;
         ctx->purge_query.len = vv_purge_query.len;
-        ngx_selective_cache_purge_select_by_cache_key(mcf, r, &ngx_selective_cache_purge_entries_handler);
+        if (ngx_trylock(&purging[ngx_process_slot])) {
+            ngx_selective_cache_purge_select_by_cache_key(mcf, r, &ngx_selective_cache_purge_entries_handler);
+        }
     }
 
     return NGX_DONE;
@@ -541,10 +546,30 @@ static void
 ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
 {
     ngx_selective_cache_purge_request_ctx_t *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
+    ngx_selective_cache_purge_main_conf_t   *mcf = NULL;
+    ngx_queue_t                             *q;
+    ngx_flag_t                               empty = 1;
 
     if (ctx != NULL) {
         ngx_queue_remove(&ctx->queue);
         ngx_selective_cache_purge_force_close_context(&ctx->context);
+
+        if (ctx->purging && !ctx->force) {
+
+            for (q = ngx_queue_head(purge_requests_queue); q != ngx_queue_sentinel(purge_requests_queue); q = ngx_queue_next(q)) {
+                ngx_selective_cache_purge_request_ctx_t *cur = ngx_queue_data(q, ngx_selective_cache_purge_request_ctx_t, queue);
+                if (!cur->force) {
+                    empty = 0;
+                    mcf = ngx_http_get_module_main_conf(cur->request, ngx_selective_cache_purge_module);
+                    ngx_selective_cache_purge_select_by_cache_key(mcf, cur->request, &ngx_selective_cache_purge_entries_handler);
+                    break;
+                }
+            }
+
+            if (empty) {
+                ngx_unlock(&purging[ngx_process_slot]);
+            }
+        }
     }
 }
 

@@ -38,6 +38,8 @@ typedef struct {
     ngx_queue_t              *entries;
     ngx_str_t                 purge_query;
     ngx_flag_t                remove_any_entry;
+    ngx_flag_t                force;
+    ngx_flag_t                purging;
     void                     *context;
     ngx_queue_t               queue;
     ngx_http_request_t       *request;
@@ -82,6 +84,7 @@ void *contexts[NGX_MAX_PROCESSES];
 void *sync_contexts[NGX_MAX_PROCESSES];
 ngx_pool_t *sync_temp_pool[NGX_MAX_PROCESSES];
 ngx_queue_t *sync_queue_entries[NGX_MAX_PROCESSES];
+ngx_atomic_t purging[NGX_MAX_PROCESSES];
 ngx_queue_t *purge_requests_queue;
 
 ngx_int_t ngx_selective_cache_purge_sync_memory_to_database(void);
