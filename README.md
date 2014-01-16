@@ -1,7 +1,7 @@
 Nginx Selective Cache Purge Module
 ==================================
 
-A module to purge cache by SQL LIKE patterns.
+A module to purge cache by GLOB patterns.
 
 _This module is not distributed with the Nginx source. See [the installation instructions](#installation)._
 
@@ -37,15 +37,16 @@ An example:
         proxy_cache_path /tmp/cache_zone levels=1:2 keys_zone=zone:10m inactive=10d max_size=100m;
         proxy_cache_path /tmp/cache_other_zone levels=1:2 keys_zone=other_zone:1m inactive=1d max_size=10m;
 
-        selective_cache_purge_database "/tmp/cache.db";
-        selective_cache_purge_database_cleanup_interval 5m;
+        selective_cache_purge_redis_host "localhost";
+        selective_cache_purge_redis_port 6379;
+        selective_cache_purge_redis_database 1;
 
         server {
             listen          8080;
             server_name     localhost;
 
             location ~ /purge(.*) {
-                selective_cache_purge_query "$1%";
+                selective_cache_purge_query "$1*";
             }
 
             location / {
@@ -63,7 +64,7 @@ An example:
 
             location ~ /purge/.*(\..*)$ {
                 #purge by extension
-                selective_cache_purge_query "%$1";
+                selective_cache_purge_query "*$1";
             }
 
             location / {
@@ -90,16 +91,16 @@ An example:
 <a id="installation"></a>Installation instructions
 --------------------------------------------------
 
-This module requires SQLite 3.7.15.2 or newer. Install it with your favourite package manager - apt-get, yum, brew - or [download](http://www.sqlite.org/download.html) and compile it.
+This module requires Redis 2.8 or newer and hiredis 0.11.0. Install it with your favourite package manager - apt-get, yum, brew - or download [Redis](http://redis.io/download) and [hiredis](https://github.com/redis/hiredis/releases) and compile them.
 
-[Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it (ex.: to ../nginx). You must then run ./configure with --add-module pointing to this project as usual, referencing the up-to-date SQLite lib and include if they are not on your default lib and include folders. Something in the lines of:
+[Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it (ex.: to ../nginx). You must then run ./configure with --add-module pointing to this project as usual, referencing the up-to-date hiredis lib and include if they are not on your default lib and include folders. Something in the lines of:
 
     $ ./configure \\
-        --with-ld-opt='-L/usr/local/sqlite/3.7.15.2/lib/' \\
-        --with-cc-opt='-I/usr/local/sqlite/3.7.15.2/include/' \\
+        --with-ld-opt='-L/usr/lib/' \\
+        --with-cc-opt='-I/usr/include/hiredis/' \\
         --add-module=../nginx-selective-cache-purge-module \\
         --prefix=/home/user/dev-workspace/nginx
-    $ make -j2
+    $ make
     $ make install
 
 
@@ -126,4 +127,4 @@ To build and run rspec automatically using rake, you need to define where nginx 
 Changelog
 ---------
 
-This is still a work in progress. Be the change.
+This is still a work in progress. Be the change. And take a look on the Changelog file.
