@@ -298,7 +298,7 @@ ngx_selective_cache_purge_file_cache_lookup_on_disk(ngx_http_request_t *r, ngx_h
     ngx_int_t          rc;
 
     c = r->cache;
-    if ((c == NULL) && (c = ngx_pcalloc(r->pool, sizeof(ngx_http_cache_t))) == NULL) {
+    if ((c = ngx_pcalloc(r->pool, sizeof(ngx_http_cache_t))) == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not alloc memory to ngx_http_cache_t structure");
         return NGX_ERROR;
     }

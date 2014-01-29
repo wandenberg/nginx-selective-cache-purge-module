@@ -1,6 +1,6 @@
 require "spec_helper"
 
-describe "Selective Cache Purge Module" do
+describe "Selective Cache Purge Module Sync Memory" do
   let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
     { }

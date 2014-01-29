@@ -309,6 +309,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
     if ((fcn == NULL) && (r != NULL)) {
         rc = ngx_selective_cache_purge_file_cache_lookup_on_disk(r, cache, entry->cache_key, key);
         if (rc != NGX_OK) {
+            ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context);
             return rc;
         }
 #if NGX_HTTP_CACHE
@@ -322,6 +323,9 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
         if (!fcn->exists) {
             /* race between concurrent purges, backoff */
             ngx_shmtx_unlock(&cache->shpool->mutex);
+            if (!fcn->deleting) {
+                ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context);
+            }
             return NGX_DECLINED;
         }
 
@@ -329,6 +333,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
         fcn->fs_size = 0;
         fcn->exists = 0;
         fcn->updating = 0;
+        fcn->deleting = 1;
 
         ngx_shmtx_unlock(&cache->shpool->mutex);
 
@@ -347,6 +352,12 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
         if (ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context) == NGX_OK) {
             entry->removed = 1;
         }
+
+
+        ngx_shmtx_lock(&cache->shpool->mutex);
+        fcn->deleting = 0;
+        ngx_shmtx_unlock(&cache->shpool->mutex);
+
         return NGX_OK;
     }
 
