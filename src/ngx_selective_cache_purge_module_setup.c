@@ -166,11 +166,8 @@ ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle)
     while (!ngx_queue_empty(purge_requests_queue) && (q = ngx_queue_last(purge_requests_queue))) {
         ngx_selective_cache_purge_request_ctx_t *ctx = ngx_queue_data(q, ngx_selective_cache_purge_request_ctx_t, queue);
 
-        ngx_selective_cache_purge_force_close_context(&ctx->context);
+        ngx_selective_cache_purge_cleanup_request_context(ctx->request);
         ngx_selective_cache_purge_send_response(ctx->request, SERVER_IS_RESTARTING_MESSAGE.data, SERVER_IS_RESTARTING_MESSAGE.len, NGX_HTTP_PRECONDITION_FAILED, &CONTENT_TYPE);
-        ngx_close_connection(ctx->request->connection);
-
-        ngx_queue_remove(q);
     }
 
     ngx_selective_cache_purge_finish_db(cycle);

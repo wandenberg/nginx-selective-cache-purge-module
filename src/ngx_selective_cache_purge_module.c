@@ -581,6 +581,7 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
                 ngx_unlock(&purging[ngx_process_slot]);
             }
         }
+        ngx_http_set_ctx(r, NULL, ngx_selective_cache_purge_module);
     }
 }
 
