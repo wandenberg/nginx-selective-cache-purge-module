@@ -7,7 +7,6 @@ void              ngx_selective_cache_purge_register_cache_entry(ngx_http_reques
 ngx_int_t         ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry, void **context);
 void              ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_send_purge_response(void *d);
-static void       ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r);
 static void       ngx_selective_cache_purge_force_remove(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_organize_entries(ngx_selective_cache_purge_shm_data_t *data);
 ngx_int_t         ngx_selective_cache_purge_create_cache_item_for_zone(ngx_rbtree_node_t *v_node, void *data);

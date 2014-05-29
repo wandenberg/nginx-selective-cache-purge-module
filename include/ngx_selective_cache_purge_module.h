@@ -89,6 +89,8 @@ ngx_queue_t *purge_requests_queue;
 
 ngx_int_t ngx_selective_cache_purge_sync_memory_to_database(void);
 
+static void       ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r);
+
 static ngx_str_t CONTENT_TYPE = ngx_string("text/plain");
 
 #define NGX_HTTP_FILE_CACHE_KEY_LEN 6

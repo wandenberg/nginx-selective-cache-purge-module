@@ -2,8 +2,8 @@
 #include <ngx_selective_cache_purge_module_utils.h>
 #include <signal.h>
 
-#include <hiredis.h>
-#include <async.h>
+#include <hiredis/hiredis.h>
+#include <hiredis/async.h>
 
 void scan_callback(redisAsyncContext *c, void *r, void *privdata);
 void scan_by_cache_key_callback(redisAsyncContext *c, void *r, void *privdata);
