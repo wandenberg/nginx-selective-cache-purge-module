@@ -1,21 +1,12 @@
 #include <ngx_selective_cache_purge_module_db.h>
 #include <ngx_selective_cache_purge_module_utils.h>
-#include <signal.h>
-
-#include <hiredis/hiredis.h>
-#include <hiredis/async.h>
 
 void scan_callback(redisAsyncContext *c, void *r, void *privdata);
 void scan_by_cache_key_callback(redisAsyncContext *c, void *r, void *privdata);
 ngx_int_t parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
 
-void redis_cleanup(void *privdata);
-int redis_event_attach(redisAsyncContext *ac);
-
-#define SELECT_DATABASE_COMMAND "SELECT %d"
-#define SCAN_DATABASE_COMMAND "SCAN %s COUNT 1000"
-#define SCAN_BY_CACHE_KEY_DATABASE_COMMAND "SCAN %s MATCH %b:*:*:* COUNT 1000"
-#define SCAN_BY_FILENAME_DATABASE_COMMAND "SCAN %s MATCH *:%b:%b:%b COUNT 1000"
+#define SCAN_DATABASE_COMMAND "SCAN %s COUNT 100"
+#define SCAN_BY_CACHE_KEY_DATABASE_COMMAND "SCAN %s MATCH %b:*:*:* COUNT 100"
 #define SET_DATABASE_COMMAND "SETEX %b:%b:%b:%b %d 1"
 #define DEL_DATABASE_COMMAND "DEL %b:%b:%b:%b"
 #define PING_DATABASE_COMMAND "PING"
@@ -47,7 +38,7 @@ ngx_selective_cache_purge_init_db(ngx_cycle_t *cycle)
     contexts[ngx_process_slot] = NULL;
     sync_contexts[ngx_process_slot] = NULL;
 
-    signal(SIGPIPE, SIG_IGN);
+    redis_nginx_init();
 
     return NGX_OK;
 }
@@ -56,55 +47,10 @@ ngx_selective_cache_purge_init_db(ngx_cycle_t *cycle)
 ngx_int_t
 ngx_selective_cache_purge_finish_db(ngx_cycle_t *cycle)
 {
-    ngx_selective_cache_purge_force_close_context(&contexts[ngx_process_slot]);
-    ngx_selective_cache_purge_force_close_context(&sync_contexts[ngx_process_slot]);
+    redis_nginx_force_close_context((redisAsyncContext **) &contexts[ngx_process_slot]);
+    redis_nginx_force_close_context((redisAsyncContext **) &sync_contexts[ngx_process_slot]);
 
     return NGX_OK;
-}
-
-
-redisAsyncContext *
-ngx_selective_cache_purge_open_context(ngx_selective_cache_purge_main_conf_t *conf, void **context)
-{
-    redisAsyncContext *c = NULL;
-
-    if ((context == NULL) || (*context == NULL) || ((redisAsyncContext *) *context)->err) {
-        c = redisAsyncConnect((const char *) conf->redis_host.data, conf->redis_port);
-        if (c == NULL) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not allocate the redis context");
-            return NULL;
-        }
-
-        if (c->err) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not create the redis context - %s", c->errstr);
-            redisAsyncFree(c);
-            return NULL;
-        }
-
-        redis_event_attach(c);
-
-        if (context != NULL) {
-            *context = c;
-        }
-
-        redisAsyncCommand(c, NULL, NULL, SELECT_DATABASE_COMMAND, conf->redis_database);
-    } else {
-        c = *context;
-    }
-
-    return c;
-}
-
-
-void
-ping_callback(redisAsyncContext *c, void *rep, void *privdata)
-{
-    void *data = c->data;
-    void (*callback) (void *) = privdata;
-    redisAsyncDisconnect(c);
-    if (callback != NULL) {
-        callback(data);
-    }
 }
 
 
@@ -119,36 +65,10 @@ stub_callback(redisAsyncContext *c, void *rep, void *privdata)
 }
 
 
-void
-ngx_selective_cache_purge_force_close_context(void **context)
-{
-    if ((context != NULL) && (*context != NULL)) {
-        redisAsyncContext *c = *context;
-        if (!c->err) {
-            redis_cleanup(c->ev.data);
-        }
-        *context = NULL;
-    }
-}
-
-
-void
-ngx_selective_cache_purge_close_context(void **context)
-{
-    if ((context != NULL) && (*context != NULL)) {
-        redisAsyncContext *c = *context;
-        if (!c->err) {
-            redisAsyncCommand(c, ping_callback, NULL, PING_DATABASE_COMMAND);
-        }
-        *context = NULL;
-    }
-}
-
-
 ngx_int_t
 ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_t *conf, void **context, void *data, void (*callback) (void *))
 {
-    redisAsyncContext *c = ngx_selective_cache_purge_open_context(conf, context);
+    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) context);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -163,7 +83,7 @@ ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_
 ngx_int_t
 ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires, void **context)
 {
-    redisAsyncContext *c = ngx_selective_cache_purge_open_context(conf, context);
+    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) context);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -177,7 +97,7 @@ ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx
 ngx_int_t
 ngx_selective_cache_purge_remove(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, void **context)
 {
-    redisAsyncContext *c = ngx_selective_cache_purge_open_context(conf, context);
+    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) context);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -191,7 +111,7 @@ ngx_selective_cache_purge_remove(ngx_selective_cache_purge_main_conf_t *conf, ng
 void
 ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_main_conf_t *conf, ngx_selective_cache_purge_shm_data_t *data, void (*callback) (ngx_selective_cache_purge_shm_data_t *))
 {
-    redisAsyncContext *c = ngx_selective_cache_purge_open_context(conf, &sync_contexts[ngx_process_slot]);
+    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) &sync_contexts[ngx_process_slot]);
     if (c == NULL) {
         callback(data);
         return;
@@ -209,7 +129,7 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_selective_cache_purge_main_con
     ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     u_char *pos = NULL;
 
-    redisAsyncContext *c = ngx_selective_cache_purge_open_context(conf, &ctx->context);
+    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) &ctx->context);
     if (c == NULL) {
         return;
     }
@@ -334,127 +254,4 @@ parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool
     }
 
     return NGX_OK;
-}
-
-
-
-
-//XXX move this functions to another project to be reusable
-void
-redis_read_event(ngx_event_t *ev)
-{
-    ngx_connection_t *connection = (ngx_connection_t *) ev->data;
-    redisAsyncHandleRead(connection->data);
-}
-
-
-void
-redis_write_event(ngx_event_t *ev)
-{
-    ngx_connection_t *connection = (ngx_connection_t *) ev->data;
-    redisAsyncHandleWrite(connection->data);
-}
-
-
-void
-redis_add_read(void *privdata)
-{
-    ngx_connection_t *connection = (ngx_connection_t *) privdata;
-    if (!connection->read->active) {
-        connection->read->handler = redis_read_event;
-        connection->read->log = connection->log;
-        if (ngx_add_event(connection->read, NGX_READ_EVENT, 0) == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not add read event to redis");
-        }
-    }
-}
-
-
-void
-redis_del_read(void *privdata)
-{
-    ngx_connection_t *connection = (ngx_connection_t *) privdata;
-    if (connection->read->active) {
-        if (ngx_del_event(connection->read, NGX_READ_EVENT, 0) == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not delete read event to redis");
-        }
-    }
-}
-
-
-void
-redis_add_write(void *privdata)
-{
-    ngx_connection_t *connection = (ngx_connection_t *) privdata;
-    if (!connection->write->active) {
-        connection->write->handler = redis_write_event;
-        connection->write->log = connection->log;
-        if (ngx_add_event(connection->write, NGX_WRITE_EVENT, NGX_CLEAR_EVENT) == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not add write event to redis");
-        }
-    }
-}
-
-
-void
-redis_del_write(void *privdata)
-{
-    ngx_connection_t *connection = (ngx_connection_t *) privdata;
-    if (connection->write->active) {
-        if (ngx_del_event(connection->write, NGX_WRITE_EVENT, 0) == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not delete write event to redis");
-        }
-    }
-}
-
-
-void
-redis_cleanup(void *privdata)
-{
-    if (privdata) {
-        ngx_connection_t *connection = (ngx_connection_t *) privdata;
-        redisAsyncContext *c = (redisAsyncContext *) connection->data;
-        if (c->err) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: connection to redis failed - %s", c->errstr);
-        }
-
-        if ((connection->fd != NGX_INVALID_FILE)) {
-            redis_del_read(privdata);
-            redis_del_write(privdata);
-            ngx_close_connection(connection);
-            c->ev.data = NULL;
-        }
-    }
-}
-
-
-int
-redis_event_attach(redisAsyncContext *ac)
-{
-    ngx_connection_t *connection;
-    redisContext *c = &(ac->c);
-
-    /* Nothing should be attached when something is already attached */
-    if (ac->ev.data != NULL) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: context already attached");
-        return REDIS_ERR;
-    }
-
-    connection = ngx_get_connection(c->fd, ngx_cycle->log);
-    if (connection == NULL) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not get a connection for fd #%d", c->fd);
-        return REDIS_ERR;
-    }
-
-
-    /* Register functions to start/stop listening for events */
-    ac->ev.addRead = redis_add_read;
-    ac->ev.delRead = redis_del_read;
-    ac->ev.addWrite = redis_add_write;
-    ac->ev.delWrite = redis_del_write;
-    ac->ev.cleanup = redis_cleanup;
-    ac->ev.data = connection;
-    connection->data = ac;
-
-    return REDIS_OK;
 }

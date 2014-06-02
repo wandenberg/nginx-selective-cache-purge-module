@@ -376,7 +376,7 @@ ngx_selective_cache_purge_sync_memory_to_database(void)
     if (ngx_trylock(&data->syncing)) {
         ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process started");
 
-        ngx_selective_cache_purge_force_close_context(&sync_contexts[ngx_process_slot]);
+        redis_nginx_force_close_context((redisAsyncContext **) &sync_contexts[ngx_process_slot]);
         data->zones = 0;
         data->zones_to_sync = 0;
         ngx_queue_init(&data->files_info_to_renew_queue);
@@ -562,7 +562,7 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
 
     if (ctx != NULL) {
         ngx_queue_remove(&ctx->queue);
-        ngx_selective_cache_purge_force_close_context(&ctx->context);
+        redis_nginx_force_close_context((redisAsyncContext **) &ctx->context);
 
         if (ctx->purging && !ctx->force) {
 
@@ -740,7 +740,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
 
     if (!node->read_memory && (node->count <= 0)) {
         data->zones_to_sync--;
-        ngx_selective_cache_purge_force_close_context(&node->context);
+        redis_nginx_force_close_context((redisAsyncContext **) &node->context);
         ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync for zone %V from memory to database finished", node->name);
     }
 
@@ -810,7 +810,7 @@ ngx_selective_cache_purge_renew_entries(void *d)
         }
     }
 
-    ngx_selective_cache_purge_force_close_context(&sync_contexts[ngx_process_slot]);
+    redis_nginx_force_close_context((redisAsyncContext **) &sync_contexts[ngx_process_slot]);
 
     if (sync_temp_pool[ngx_process_slot] != NULL) {
         ngx_destroy_pool(sync_temp_pool[ngx_process_slot]);

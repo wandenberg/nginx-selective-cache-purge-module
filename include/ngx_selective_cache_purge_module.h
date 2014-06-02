@@ -8,6 +8,7 @@
 #include <ngx_http_cache.h>
 #include <ngx_md5.h>
 #include <nginx.h>
+#include <redis_nginx_adapter.h>
 
 typedef struct {
     ngx_flag_t                enabled;
