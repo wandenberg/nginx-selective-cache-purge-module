@@ -89,12 +89,6 @@ RSpec::Matchers.define :have_not_purged_urls do |urls|
 end
 
 RSpec.configure do |config|
-  config.before(:suite) do
-    FileUtils.rm_rf Dir[File.join(NginxTestHelper.nginx_tests_tmp_dir, "cores", "**")]
-  end
-  config.before(:each) do
-    FileUtils.mkdir_p File.join(File.join(NginxTestHelper.nginx_tests_tmp_dir, "cores", config_id))
-  end
   config.after(:each) do
     NginxTestHelper::Config.delete_config_and_log_files(config_id) if has_passed?
     redis.quit
