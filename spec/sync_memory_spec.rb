@@ -15,7 +15,7 @@ describe "Selective Cache Purge Module Sync Memory" do
     FileUtils.mkdir_p proxy_cache_path
     FileUtils.mkdir_p "#{proxy_cache_path}_2"
 
-    Zip::ZipFile.open(File.expand_path('../spec/assets/cache.zip', File.dirname(__FILE__))) do |zipfile|
+    Zip::File.open(File.expand_path('../spec/assets/cache.zip', File.dirname(__FILE__))) do |zipfile|
       zipfile.restore_permissions = true
       zipfile.each do |file|
         FileUtils.mkdir_p File.dirname("#{proxy_cache_path}/#{file}")
