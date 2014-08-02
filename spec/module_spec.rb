@@ -81,128 +81,106 @@ describe "Selective Cache Purge Module" do
     end
 
     context "with cached entries" do
-      let! :cached_urls do
+      let!(:cached_urls) do
         [
           "/index.html",
           "/index2.html",
+          "/resources.json",
           "/resources/r1.jpg",
           "/resources/r2.jpg",
           "/resources/r3.jpg",
           "/some/path/index.html",
-          "/resources.json"
         ]
       end
 
       def prepare_cache
         cached_urls.each do |url|
-          response_for("http://#{nginx_host}:#{nginx_port}/#{url}")
+          response_for(File.join("http://#{nginx_host}:#{nginx_port}", url))
         end
       end
 
-      it "should remove only the matched entries from database" do
+      it "should remove only matched entries" do
         purged_urls = ["/index.html","/index2.html"]
-        nginx_run_server(config) do
-          prepare_cache
-          response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
-        end
-        remaining_keys = get_database_entries_for('*')
-        remaining_keys.flatten.should have_not_purged_urls(purged_urls)
-        remaining_keys.flatten.should have_purged_urls(cached_urls - purged_urls)
-      end
 
-      it "should remove the matched entries from the filesystem" do
-        purged_urls = ["/index.html","/index2.html"]
-        purged_files = []
         nginx_run_server(config) do
           prepare_cache
-          purged_files = get_database_entries_for('index%').flatten
+          purged_files = get_database_entries_for('/index%').map{ |entry| entry[-1] }
+
+          purged_files.count.should eq 2
           purged_files.each do |f|
             File.exists?("#{proxy_cache_path}#{f}").should be_true
           end
-          response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
-        end
-        purged_files.each do |f|
-          File.exists?("#{proxy_cache_path}#{f}").should be_false
+
+          resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
+          resp.code.should eq '200'
+          resp.body.should have_purged_urls(purged_urls)
+
+          get_database_entries_for('/index%').should be_empty
+          remaining_keys = get_database_entries_for('*').map{ |entry| entry[0] }.sort
+          remaining_keys.should eql(cached_urls - purged_urls)
+
+          purged_files.each do |f|
+            File.exists?("#{proxy_cache_path}#{f}").should be_false
+          end
         end
       end
 
-      it "should return 200 for a non-empty query" do
-        nginx_run_server(config) do
-          prepare_cache
-          response_for("http://#{nginx_host}:#{nginx_port}/purge/index.html").code.should eq '200'
-        end
-      end
-
-      it "should remove an entry from the database on successful purge" do
+      it "should remove only exact entry" do
         path = "/index.html"
+
         nginx_run_server(config) do
           prepare_cache
-          response_for("http://#{nginx_host}:#{nginx_port}/purge#{path}").code.should eq '200'
+          purged_files = get_database_entries_for(path).map{ |entry| entry[-1] }
+
+          purged_files.count.should eq 1
+          purged_files.each do |f|
+            File.exists?("#{proxy_cache_path}#{f}").should be_true
+          end
+
+          resp = response_for("http://#{nginx_host}:#{nginx_port}/purge#{path}")
+          resp.code.should eq '200'
+          resp.body.should have_purged_urls([path])
+
+          get_database_entries_for(path).should be_empty
+          remaining_keys = get_database_entries_for('*').map{ |entry| entry[0] }.sort
+          remaining_keys.should eql(cached_urls - [path])
+
+          purged_files.each do |f|
+            File.exists?("#{proxy_cache_path}#{f}").should be_false
+          end
         end
-        get_database_entries_for(path).should be_empty
       end
 
-      it "should return a list of the removed entries after purging" do
+      it "should return an empty list when the query does not match any entries" do
         nginx_run_server(config) do
           prepare_cache
-          response_for("http://#{nginx_host}:#{nginx_port}/purge/").body.should have_purged_urls(cached_urls)
+          resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path")
+          resp.code.should eq '404'
+          resp.body.should eq "Could not found any entry that match the expression: /some/random/invalid/path*\n"
         end
       end
 
-      context "matching queries" do
-        it "should return an empty list when the query does not match any entries" do
-          nginx_run_server(config) do
-            prepare_cache
-            response_for("http://#{nginx_host}:#{nginx_port}/purge/some/random/invalid/path").body.should have_not_purged_urls(cached_urls)
-          end
+      it "should not cause md5 collision when nginx memory is empty" do
+        nginx_run_server(config) do
+          prepare_cache
         end
 
-        it "should purge only urls that match the purge query" do
-          nginx_run_server(config) do
-            prepare_cache
-            purged_urls = ["/index.html","/index2.html"]
-            response = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
-            response.body.should have_purged_urls(purged_urls)
-            response.body.should have_not_purged_urls(cached_urls - purged_urls)
-          end
-        end
+        nginx_run_server(config) do |conf|
+          error_log_pre = File.readlines(conf.error_log)
 
-        it "should purge only urls that match the purge query path" do
-          nginx_run_server(config) do
-            prepare_cache
-            purged_urls = [
-              "/resources/r1.jpg",
-              "/resources/r2.jpg",
-              "/resources/r3.jpg"
-            ]
-            response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
-            response.body.should have_purged_urls(purged_urls)
-            response.body.should have_not_purged_urls(cached_urls - purged_urls)
-          end
-        end
+          purged_urls = [
+            "/resources/r1.jpg",
+            "/resources/r2.jpg",
+            "/resources/r3.jpg"
+          ]
 
-        it "should not cause md5 collision when the isn't on memory" do
-          nginx_run_server(config) do
-            prepare_cache
-          end
+          response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
 
-          nginx_run_server(config) do |conf|
-            error_log_pre = File.readlines(conf.error_log)
+          error_log_pos = File.readlines(conf.error_log)
+          (error_log_pos - error_log_pre).join.should_not include("md5 collision")
 
-            purged_urls = [
-              "/resources/r1.jpg",
-              "/resources/r2.jpg",
-              "/resources/r3.jpg"
-            ]
-
-            response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
-
-            error_log_pos = File.readlines(conf.error_log)
-            (error_log_pos - error_log_pre).join.should_not include("md5 collision")
-
-            response.body.should have_purged_urls(purged_urls)
-            response.body.should have_not_purged_urls(cached_urls - purged_urls)
-          end
+          response.body.should have_purged_urls(purged_urls)
+          response.body.should have_not_purged_urls(cached_urls - purged_urls)
         end
       end
     end
