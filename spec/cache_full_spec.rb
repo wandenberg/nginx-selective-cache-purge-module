@@ -1,19 +1,12 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module Cache Full" do
-  let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
     {
       worker_processes: 1,
       max_size: "1m",
       keys_zone: "1m"
     }
-  end
-
-  before :each do
-    clear_database
-    FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
-    FileUtils.mkdir_p proxy_cache_path
   end
 
   def cached_files
@@ -41,8 +34,7 @@ describe "Selective Cache Purge Module Cache Full" do
       nginx_run_server(config, timeout: 60) do |conf|
         rotate_cache
 
-        resp = response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}")
-        resp.code.should eql('404')
+        response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}").code.should eql('404')
 
         rotate_cache(1001)
       end

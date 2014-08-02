@@ -9,6 +9,10 @@ require "uri"
 
 require File.expand_path('nginx_configuration', File.dirname(__FILE__))
 
+def proxy_cache_path
+  "/tmp/cache"
+end
+
 def redis_host
   'localhost'
 end
@@ -89,6 +93,12 @@ RSpec::Matchers.define :have_not_purged_urls do |urls|
 end
 
 RSpec.configure do |config|
+  config.before(:each) do
+    clear_database
+    FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
+    FileUtils.mkdir_p proxy_cache_path
+  end
+
   config.after(:each) do
     NginxTestHelper::Config.delete_config_and_log_files(config_id) if has_passed?
     redis.quit

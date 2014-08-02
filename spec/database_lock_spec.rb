@@ -1,15 +1,8 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module Database Lock" do
-  let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
     { }
-  end
-
-  before :each do
-    clear_database
-    FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
-    FileUtils.mkdir_p proxy_cache_path
   end
 
   def run_concurrent_requests_check(number_of_requests, path = "", &block)

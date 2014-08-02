@@ -1,7 +1,6 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module Sync Memory" do
-  let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
     { }
   end
@@ -9,10 +8,7 @@ describe "Selective Cache Purge Module Sync Memory" do
   let(:number_of_files_on_cache) { 500 }
 
   before :each do
-    clear_database
-    FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
     FileUtils.rm_rf Dir["#{proxy_cache_path}_2/**"]
-    FileUtils.mkdir_p proxy_cache_path
     FileUtils.mkdir_p "#{proxy_cache_path}_2"
 
     Zip::File.open(File.expand_path('../spec/assets/cache.zip', File.dirname(__FILE__))) do |zipfile|

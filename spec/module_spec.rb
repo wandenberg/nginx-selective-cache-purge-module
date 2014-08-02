@@ -1,15 +1,8 @@
 require "spec_helper"
 
 describe "Selective Cache Purge Module" do
-  let!(:proxy_cache_path) { "/tmp/cache" }
   let!(:config) do
     { }
-  end
-
-  before :each do
-    clear_database
-    FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
-    FileUtils.mkdir_p proxy_cache_path
   end
 
   context "when caching" do
@@ -35,45 +28,39 @@ describe "Selective Cache Purge Module" do
       get_database_entries_for(path).should_not be_empty
     end
 
-    it "should be able to save an entry for status codes other than 200" do
+    it "should save an entry for status codes other than 200" do
       path = "/not-found/index.html"
       nginx_run_server(config, timeout: 60) do |conf|
-        resp_1 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
-        resp_1.code.should eq '404'
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '404'
         File.read(conf.access_log).should include("[MISS]")
 
         sleep 15
 
-        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
-        resp_2.code.should eq '404'
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '404'
         File.read(conf.access_log).should include("[HIT]")
 
         sleep 20
 
-        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
-        resp_2.code.should eq '404'
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '404'
         File.read(conf.access_log).should include("[EXPIRED]")
       end
       get_database_entries_for(path).should_not be_empty
     end
 
-    it "should be able to save an entry when backend is unavailable" do
+    it "should save an entry when backend is unavailable" do
       path = "/unavailable"
       nginx_run_server(config, timeout: 60) do |conf|
-        resp_1 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
-        resp_1.code.should eq '502'
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '502'
         File.read(conf.access_log).should include("[MISS]")
 
         sleep 15
 
-        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
-        resp_2.code.should eq '502'
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '502'
         File.read(conf.access_log).should include("[HIT]")
 
         sleep 20
 
-        resp_2 = response_for("http://#{nginx_host}:#{nginx_port}#{path}")
-        resp_2.code.should eq '502'
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '502'
         File.read(conf.access_log).should include("[MISS]")
       end
       get_database_entries_for(path).should_not be_empty
@@ -106,7 +93,7 @@ describe "Selective Cache Purge Module" do
         ]
       end
 
-      def prepare_cache()
+      def prepare_cache
         cached_urls.each do |url|
           response_for("http://#{nginx_host}:#{nginx_port}/#{url}")
         end
