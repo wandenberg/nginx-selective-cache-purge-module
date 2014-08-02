@@ -6,7 +6,7 @@ group :test do
   gem 'rspec'
   gem 'nginx_test_helper'
   gem 'em-http-request'
-  gem 'debugger'
+  gem 'byebug'
   gem 'rubyzip', require: 'zip'
   gem 'hiredis'
   gem 'redis'
