@@ -148,7 +148,6 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
 
                 switch (rc) {
                 case NGX_OK:
-                    r->write_event_handler = ngx_http_request_empty_handler;
                     ctx->remove_any_entry = 1;
                     break;
                 case NGX_DECLINED:
@@ -179,6 +178,8 @@ ngx_selective_cache_purge_send_purge_response(void *d)
     ngx_queue_t                             *cur;
     ngx_str_t                               *response;
     ngx_int_t                                rc;
+
+    r->write_event_handler = ngx_http_request_empty_handler;
 
     if (ctx->remove_any_entry) {
         if (r->method == NGX_HTTP_HEAD) {
@@ -287,7 +288,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
     ngx_http_file_cache_node_t *fcn;
     u_char                      key[NGX_HTTP_CACHE_KEY_LEN];
     size_t                      len = 2 * NGX_HTTP_CACHE_KEY_LEN;
-    ngx_int_t                   rc;
+    ngx_int_t                   err = 0;
 
     /* get cache by zone/type */
     if ((entry->filename == NULL) ||
@@ -295,6 +296,8 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
         ((cache = (ngx_http_file_cache_t *) cache_zone->cache->data) == NULL)) {
         return NGX_DECLINED;
     }
+
+    entry->path = &cache->path->name;
 
     /* restore cache key md5 */
     ngx_selective_cache_purge_hex_read(key, entry->filename->data + entry->filename->len - len, len);
@@ -306,10 +309,11 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
 
     /* try to get the file cache reference forcing the read from disk */
     if ((fcn == NULL) && (r != NULL)) {
-        rc = ngx_selective_cache_purge_file_cache_lookup_on_disk(r, cache, entry->cache_key, key);
-        if (rc != NGX_OK) {
-            ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context);
-            return rc;
+        if (ngx_selective_cache_purge_file_cache_lookup_on_disk(r, cache, entry->cache_key, key) != NGX_OK) {
+            if (ngx_errno == NGX_ENOENT) {
+                ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context);
+            }
+            return NGX_DECLINED;
         }
 #if NGX_HTTP_CACHE
         fcn = r->cache->node;
@@ -334,24 +338,27 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
         fcn->updating = 0;
         fcn->deleting = 1;
 
-        ngx_shmtx_unlock(&cache->shpool->mutex);
-
-        entry->path = &cache->path->name;
         u_char filename_data[entry->path->len + entry->filename->len + 1];
 
         ngx_memcpy(filename_data, entry->path->data, entry->path->len);
         ngx_memcpy(filename_data + entry->path->len, entry->filename->data, entry->filename->len);
         filename_data[entry->path->len + entry->filename->len] = '\0';
 
+        ngx_shmtx_unlock(&cache->shpool->mutex);
+
         if (ngx_delete_file(filename_data) == NGX_FILE_ERROR) {
             /* entry in error log is enough, don't notice client */
             ngx_log_error(NGX_LOG_CRIT, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: "ngx_delete_file_n " \"%s\" failed", filename_data);
+            err = ngx_errno;
         }
 
-        if (ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context) == NGX_OK) {
-            entry->removed = 1;
+        if ((err == 0) || (err == NGX_ENOENT)) {
+            if (ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context) == NGX_OK) {
+                if (err == 0) {
+                  entry->removed = 1;
+                }
+            }
         }
-
 
         ngx_shmtx_lock(&cache->shpool->mutex);
         fcn->deleting = 0;

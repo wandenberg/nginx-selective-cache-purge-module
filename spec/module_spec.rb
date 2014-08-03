@@ -183,6 +183,54 @@ describe "Selective Cache Purge Module" do
           response.body.should have_not_purged_urls(cached_urls - purged_urls)
         end
       end
+
+      context "and fail to remove file from the filesystem" do
+        it "should ignore the missing entries but clear it from database" do
+          nginx_run_server(config) do
+            prepare_cache
+            purged_files = get_database_entries_for('*')
+            purged_files.each do |entry|
+              File.exists?("#{proxy_cache_path}#{entry[-1]}").should be_true
+            end
+
+            # change directory of /index2.html to be read only
+            FileUtils.chmod(0600, File.dirname("#{proxy_cache_path}/4/37"))
+
+            # remove the file of /some/path/index.html from disk
+            FileUtils.rm("#{proxy_cache_path}/6/93/9b06947cef9c730a57392e1221d3a936")
+            File.exists?("#{proxy_cache_path}/6/93/9b06947cef9c730a57392e1221d3a936").should be_false
+
+            resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/*index*")
+            resp.code.should eq '200'
+            resp.body.should have_purged_urls(["/index.html"])
+
+            # change directory to original
+            FileUtils.chmod(0700, File.dirname("#{proxy_cache_path}/4/37"))
+          end
+
+          # change directory of /resources/r2.jpg to be read only
+          FileUtils.chmod(0600, File.dirname("#{proxy_cache_path}/9/e9"))
+
+          # remove the file of /resources/r1.jpg from disk
+          FileUtils.rm("#{proxy_cache_path}/5/32/e121c6da57be48c3f112adf6a8e54325")
+          File.exists?("#{proxy_cache_path}/5/32/e121c6da57be48c3f112adf6a8e54325").should be_false
+
+          nginx_run_server(config.merge(worker_processes: 1), timeout: 600) do
+            resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources*")
+            resp.code.should eq '200'
+            resp.body.should have_purged_urls(["/resources/r3.jpg", "/resources.json"])
+          end
+
+          # change directory to original
+          FileUtils.chmod(0700, File.dirname("#{proxy_cache_path}/9/e9"))
+
+          remaining_keys = get_database_entries_for('*')
+          remaining_keys.map{|k| k[0]}.sort.should eq ["/index2.html", "/resources/r2.jpg"]
+
+          remaining_files = Dir["#{proxy_cache_path}/**/**"].select{|f| File.file?(f)}.map{|f| f.gsub(proxy_cache_path, "") }.sort
+          remaining_files.should eq ["/4/37/893f012e35119c29787435670250b374", "/9/e9/2dd79c7d48e8dc92e4dfce4e3f638e99"]
+        end
+      end
     end
   end
 end

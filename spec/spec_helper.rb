@@ -95,6 +95,7 @@ end
 RSpec.configure do |config|
   config.before(:each) do
     clear_database
+    FileUtils.chmod_R(0700, proxy_cache_path) if File.exists?(proxy_cache_path)
     FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
     FileUtils.mkdir_p proxy_cache_path
   end
