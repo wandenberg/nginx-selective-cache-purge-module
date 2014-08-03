@@ -44,6 +44,8 @@ typedef struct {
     void                     *context;
     ngx_queue_t               queue;
     ngx_http_request_t       *request;
+    ngx_queue_t              *last;
+    ngx_event_t              *purging_files_event;
 } ngx_selective_cache_purge_request_ctx_t;
 
 typedef struct {

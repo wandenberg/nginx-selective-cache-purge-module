@@ -206,6 +206,42 @@ describe "Selective Cache Purge Module Cache Full" do
         end
       end
     end
+
+    context "and there are other requests comming" do
+      it "should send response to all requests" do
+        nginx_run_server(config, timeout: 60) do |conf|
+          rotate_cache
+
+          EventMachine.run do
+            request_sent = 0
+            request_received = 0
+
+            timer = EventMachine::PeriodicTimer.new(0.05) do
+              request_sent += 1
+              req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/index.html", connect_timeout: 10, inactivity_timeout: 15).get
+              req.callback do
+                fail("Request failed with error #{req.response_header.status}") if req.response_header.status != 200
+                request_received += 1
+              end
+              # req.errback do
+                # fail("Request failed!!! #{req.error}")
+                # EventMachine.stop
+              # end
+            end
+
+            req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", connect_timeout: 10, inactivity_timeout: 60).get
+            req.callback do
+              timer.cancel
+              sleep 1.5
+              cached_files.count.should be_within(5).of(0)
+              request_sent.should be > 10
+              request_received.should be_within(5).of(request_sent)
+              EventMachine.stop
+            end
+          end
+        end
+      end
+    end
   end
 end
 

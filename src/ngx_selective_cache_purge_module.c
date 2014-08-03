@@ -14,6 +14,7 @@ ngx_int_t         ngx_selective_cache_purge_zone_init(ngx_rbtree_node_t *v_node,
 void              ngx_selective_cache_purge_store_new_entries(void *d);
 void              ngx_selective_cache_purge_remove_old_entries(void *d);
 void              ngx_selective_cache_purge_renew_entries(void *d);
+static void       ngx_selective_cache_purge_deleting_files_timer_handler(ngx_event_t *ev);
 
 static ngx_str_t NOT_FOUND_MESSAGE = ngx_string("Could not found any entry that match the expression: %V\n");
 static ngx_str_t OK_MESSAGE = ngx_string("The following entries where purged matched by the expression: %V\n");
@@ -62,6 +63,11 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
         return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
     }
 
+    if ((ctx->purging_files_event = ngx_pcalloc(r->pool, sizeof(ngx_event_t))) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not allocate memory to purge event");
+        return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
+    }
+
     if ((cln = ngx_pool_cleanup_add(r->pool, 0)) == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: unable to allocate memory for cleanup");
         return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
@@ -76,6 +82,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     ctx->force = 0;
     ctx->purging = 0;
     ctx->request = r;
+    ctx->purging_files_event->data = r;
     ngx_queue_insert_tail(purge_requests_queue, &ctx->queue);
 
     ngx_http_set_ctx(r, ctx, ngx_selective_cache_purge_module);
@@ -133,6 +140,7 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
     ngx_selective_cache_purge_cache_item_t  *entry;
     ngx_queue_t                             *cur;
     ngx_int_t                                rc;
+    ngx_int_t                                processed = 0;
 
 #  if (NGX_HAVE_FILE_AIO)
     if (r->aio) {
@@ -141,7 +149,7 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
 #  endif
 
     if (ctx->entries != NULL) {
-        for (cur = ngx_queue_head(ctx->entries); cur != ctx->entries; cur = ngx_queue_next(cur)) {
+        for (cur = (ctx->last == NULL) ? ngx_queue_head(ctx->entries) : ctx->last; cur != ctx->entries; cur = ngx_queue_next(cur), processed++) {
             entry = ngx_queue_data(cur, ngx_selective_cache_purge_cache_item_t, queue);
             if (!entry->removed) {
                 rc = ngx_selective_cache_purge_remove_cache_entry(conf, r, entry, &ctx->context);
@@ -151,6 +159,11 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
                     ctx->remove_any_entry = 1;
                     break;
                 case NGX_DECLINED:
+                    if (processed >= 50) {
+                        ctx->last = ngx_queue_next(cur);
+                        ngx_selective_cache_purge_timer_set(100, ctx->purging_files_event, ngx_selective_cache_purge_deleting_files_timer_handler, 1);
+                        return;
+                    }
                     break;
 #  if (NGX_HAVE_FILE_AIO)
                     case NGX_AGAIN:
@@ -826,4 +839,11 @@ ngx_selective_cache_purge_renew_entries(void *d)
     ngx_unlock(&data->syncing);
 
     ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process finished");
+}
+
+
+static void
+ngx_selective_cache_purge_deleting_files_timer_handler(ngx_event_t *ev)
+{
+    ngx_selective_cache_purge_entries_handler(ev->data);
 }
