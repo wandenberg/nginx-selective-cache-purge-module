@@ -240,6 +240,36 @@ describe "Selective Cache Purge Module Cache Full" do
         end
       end
     end
+
+    context "and the purge request is canceled" do
+      context "during the purge files step" do
+        it "should stop purging" do
+          nginx_run_server(config.merge(max_size: "4m"), timeout: 60) do |conf|
+            rotate_cache(1, 1024)
+            initial_size = cached_files.count
+            initial_size.should eq 1023
+
+            EventMachine.run do
+              req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", inactivity_timeout: 0.5).get
+              req.callback do
+                fail("The request was not canceled")
+                EventMachine.stop
+              end
+              req.errback do
+                final_size = cached_files.count
+                final_size.should be > 0
+                final_size.should be < initial_size
+
+                EM.add_timer(1) do
+                  cached_files.count.should eq final_size
+                  EventMachine.stop
+                end
+              end
+            end
+          end
+        end
+      end
+    end
   end
 end
 

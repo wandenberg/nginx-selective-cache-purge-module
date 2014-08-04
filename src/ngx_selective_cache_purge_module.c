@@ -581,6 +581,10 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
     if (ctx != NULL) {
         ngx_queue_remove(&ctx->queue);
         redis_nginx_force_close_context((redisAsyncContext **) &ctx->context);
+        if ((ctx->purging_files_event != NULL) && ctx->purging_files_event->timer_set) {
+            ngx_del_timer(ctx->purging_files_event);
+        }
+        ctx->purging_files_event = NULL;
 
         if (ctx->purging && !ctx->force) {
 
