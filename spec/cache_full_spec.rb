@@ -13,16 +13,18 @@ describe "Selective Cache Purge Module Cache Full" do
     Dir["#{proxy_cache_path}/**/**"].select{|path| File.file?(path)}
   end
 
-  def rotate_cache(start=1)
+  def rotate_cache(start=1, expected_cached_files=nil)
     initial = get_database_entries_for("*").count
-    1000.times do |i|
+    number_of_requests = expected_cached_files.nil? ? 1000 : 2 * expected_cached_files
+    expected_cached_files ||= 256
+    number_of_requests.times do |i|
       response_for("http://#{nginx_host}:#{nginx_port}/to/set/cache/full#{start + i}.html")
     end
     final = get_database_entries_for("*").count
-    final.should eql(initial + 1000)
-    cached_files.count.should be > 256 # max_size / page_size
+    final.should eql(initial + number_of_requests)
+    cached_files.count.should be > expected_cached_files # max_size / page_size
     count = 0
-    while (total = cached_files.count) > 256 # max_size / page_size
+    while (total = cached_files.count) > expected_cached_files # max_size / page_size
       sleep 1
       count += 1
       raise "Cache still over limit. Has #{total} files" if count > 10
@@ -223,10 +225,6 @@ describe "Selective Cache Purge Module Cache Full" do
                 fail("Request failed with error #{req.response_header.status}") if req.response_header.status != 200
                 request_received += 1
               end
-              # req.errback do
-                # fail("Request failed!!! #{req.error}")
-                # EventMachine.stop
-              # end
             end
 
             req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", connect_timeout: 10, inactivity_timeout: 60).get
