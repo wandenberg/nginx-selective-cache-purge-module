@@ -82,6 +82,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     ctx->purging = 0;
     ctx->request = r;
     ctx->purging_files_event->data = r;
+    ctx->redis_ctx = NULL;
     ngx_queue_insert_tail(purge_requests_queue, &ctx->queue);
 
     ngx_http_set_ctx(r, ctx, ngx_selective_cache_purge_module);
@@ -585,6 +586,12 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
             ngx_del_timer(ctx->purging_files_event);
         }
         ctx->purging_files_event = NULL;
+
+        if (ctx->redis_ctx != NULL) {
+            ctx->redis_ctx->request_ctx = NULL;
+            ctx->redis_ctx->callback = NULL;
+        }
+        ctx->redis_ctx = NULL;
 
         if (ctx->purging && !ctx->force) {
 

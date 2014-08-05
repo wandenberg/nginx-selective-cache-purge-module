@@ -4,6 +4,8 @@
 void scan_callback(redisAsyncContext *c, void *r, void *privdata);
 void scan_by_cache_key_callback(redisAsyncContext *c, void *r, void *privdata);
 ngx_int_t parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
+void select_by_cache_key(ngx_http_request_t *r, char *cursor, void (*callback) (ngx_http_request_t *r));
+
 
 #define SCAN_DATABASE_COMMAND "SCAN %s COUNT 100"
 #define SCAN_BY_CACHE_KEY_DATABASE_COMMAND "SCAN %s MATCH %b:*:*:* COUNT 100"
@@ -126,24 +128,41 @@ ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_main_conf_t
 void
 ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, void (*callback) (ngx_http_request_t *r))
 {
-    ngx_selective_cache_purge_main_conf_t    *conf = ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
     ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     u_char *pos = NULL;
+
+    while ((pos = ngx_strnstr(ctx->purge_query.data, "%", ctx->purge_query.len)) != NULL) {
+        ngx_memset(pos, '*', 1);
+    }
+
+    select_by_cache_key(r, "0", callback);
+}
+
+void
+select_by_cache_key(ngx_http_request_t *r, char *cursor, void (*callback) (ngx_http_request_t *r))
+{
+    ngx_selective_cache_purge_redis_ctx_t    *redis_ctx;
+    ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
+    ngx_selective_cache_purge_main_conf_t    *conf =  ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
 
     redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) &ctx->context);
     if (c == NULL) {
         return;
     }
 
+    if ((redis_ctx = ngx_alloc(sizeof(ngx_selective_cache_purge_redis_ctx_t), ngx_cycle->log)) == NULL) {
+        return;
+    }
+
+    redis_ctx->callback = callback;
+    redis_ctx->request_ctx = ctx;
+    ctx->redis_ctx = redis_ctx;
+
     ctx->purging = 1;
 
     c->data = r;
 
-    while ((pos = ngx_strnstr(ctx->purge_query.data, "%", ctx->purge_query.len)) != NULL) {
-        ngx_memset(pos, '*', 1);
-    }
-
-    redisAsyncCommand(c, scan_by_cache_key_callback, callback, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, "0", ctx->purge_query.data, ctx->purge_query.len);
+    redisAsyncCommand(c, scan_by_cache_key_callback, redis_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, ctx->purge_query.data, ctx->purge_query.len);
 }
 
 
@@ -182,12 +201,19 @@ scan_callback(redisAsyncContext *c, void *rep, void *privdata)
 void
 scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
 {
+    ngx_selective_cache_purge_redis_ctx_t *redis_ctx = privdata;
+    ngx_selective_cache_purge_request_ctx_t *ctx = redis_ctx->request_ctx;
+    void (*callback) (ngx_http_request_t *r) = redis_ctx->callback;
     ngx_uint_t i;
-    ngx_http_request_t *r = c->data;
-    void (*callback) (ngx_http_request_t *r) = privdata;
 
-    ngx_selective_cache_purge_request_ctx_t *ctx = ngx_http_get_module_ctx((ngx_http_request_t *) c->data, ngx_selective_cache_purge_module);
+    ngx_free(redis_ctx);
 
+    if (ctx == NULL) {
+        return;
+    }
+    ctx->redis_ctx = NULL;
+
+    ngx_http_request_t *r = ctx->request;
     redisReply *reply = rep;
     if (reply == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_callback");
@@ -216,7 +242,7 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
     if (strncmp(reply->element[0]->str, "0", 1) == 0) {
         callback(r);
     } else {
-        redisAsyncCommand(c, scan_by_cache_key_callback, callback, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, reply->element[0]->str, ctx->purge_query.data, ctx->purge_query.len);
+        select_by_cache_key(r, reply->element[0]->str, callback);
     }
 }
 

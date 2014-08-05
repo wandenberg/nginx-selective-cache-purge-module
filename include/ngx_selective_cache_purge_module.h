@@ -36,6 +36,11 @@ typedef struct {
 } ngx_selective_cache_purge_cache_item_t;
 
 typedef struct {
+    void                     *request_ctx;
+    void                     *callback;
+} ngx_selective_cache_purge_redis_ctx_t;
+
+typedef struct {
     ngx_queue_t              *entries;
     ngx_str_t                 purge_query;
     ngx_flag_t                remove_any_entry;
@@ -46,6 +51,7 @@ typedef struct {
     ngx_http_request_t       *request;
     ngx_queue_t              *last;
     ngx_event_t              *purging_files_event;
+    ngx_selective_cache_purge_redis_ctx_t   *redis_ctx;
 } ngx_selective_cache_purge_request_ctx_t;
 
 typedef struct {
