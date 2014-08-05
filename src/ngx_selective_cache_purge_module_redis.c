@@ -124,8 +124,9 @@ ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_main_conf_t
 
 
 void
-ngx_selective_cache_purge_select_by_cache_key(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, void (*callback) (ngx_http_request_t *r))
+ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, void (*callback) (ngx_http_request_t *r))
 {
+    ngx_selective_cache_purge_main_conf_t    *conf = ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
     ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     u_char *pos = NULL;
 

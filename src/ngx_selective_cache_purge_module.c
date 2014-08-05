@@ -48,7 +48,6 @@ ngx_int_t
 ngx_selective_cache_purge_handler(ngx_http_request_t *r)
 {
     ngx_selective_cache_purge_request_ctx_t *ctx = NULL;
-    ngx_selective_cache_purge_main_conf_t   *mcf =  ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
     ngx_selective_cache_purge_loc_conf_t    *conf = ngx_http_get_module_loc_conf(r, ngx_selective_cache_purge_module);
     ngx_str_t                                vv_purge_query = ngx_null_string, vv_sync = ngx_null_string, vv_cache_key = ngx_null_string, *message;
     ngx_pool_cleanup_t                      *cln;
@@ -124,7 +123,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
         ctx->purge_query.data = vv_purge_query.data;
         ctx->purge_query.len = vv_purge_query.len;
         if (ngx_trylock(&purging[ngx_process_slot])) {
-            ngx_selective_cache_purge_select_by_cache_key(mcf, r, &ngx_selective_cache_purge_entries_handler);
+            ngx_selective_cache_purge_select_by_cache_key(r, &ngx_selective_cache_purge_entries_handler);
         }
     }
 
@@ -576,7 +575,6 @@ static void
 ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
 {
     ngx_selective_cache_purge_request_ctx_t *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
-    ngx_selective_cache_purge_main_conf_t   *mcf = NULL;
     ngx_queue_t                             *q;
     ngx_flag_t                               empty = 1;
 
@@ -590,8 +588,7 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
                 ngx_selective_cache_purge_request_ctx_t *cur = ngx_queue_data(q, ngx_selective_cache_purge_request_ctx_t, queue);
                 if (!cur->force) {
                     empty = 0;
-                    mcf = ngx_http_get_module_main_conf(cur->request, ngx_selective_cache_purge_module);
-                    ngx_selective_cache_purge_select_by_cache_key(mcf, cur->request, &ngx_selective_cache_purge_entries_handler);
+                    ngx_selective_cache_purge_select_by_cache_key(cur->request, &ngx_selective_cache_purge_entries_handler);
                     break;
                 }
             }
