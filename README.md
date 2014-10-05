@@ -91,7 +91,10 @@ An example:
 <a id="installation"></a>Installation instructions
 --------------------------------------------------
 
-This module requires Redis 2.8 or newer and hiredis 0.11.0. Install it with your favourite package manager - apt-get, yum, brew - or download [Redis](http://redis.io/download) and [hiredis](https://github.com/redis/hiredis/releases) and compile them.
+This module requires:
+- Redis 2.8 or newer. Install it with your favourite package manager - apt-get, yum, brew - or download [Redis](http://redis.io/download) and compile it.
+- hiredis 0.11.0. Install it with your favourite package manager - apt-get, yum, brew - or download [hiredis](https://github.com/redis/hiredis/releases) and compile it.
+- [redis_nginx_adapter](https://github.com/wandenberg/redis_nginx_adapter) library
 
 [Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it (ex.: to ../nginx). You must then run ./configure with --add-module pointing to this project as usual, referencing the up-to-date hiredis lib and include if they are not on your default lib and include folders. Something in the lines of:
 
