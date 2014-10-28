@@ -1,3 +1,19 @@
+### 0.5.5
+- Add support to connect to redis using unix socket
+
+### 0.5.4
+- Fix scan on redis and purge files operations when purge request is canceled
+- Fix to not let worker in starvation when purging multiple files
+- Fix cleanup when problems occurs while checking if the file is on cache dir
+- Fix build on nginx 1.3.2+
+- Refactor to use redis_nginx_adapter
+
+### 0.5.3
+- Fix cleanup requests when server is restarting
+
+### 0.5.2
+- Fix purge files which are on redis but not on nginx memory or cache path, avoiding the cache size be over the limit
+
 ### 0.5.1
 - Stop scan on redis if purge operation is canceled
 - Ensure only one purge operation by nginx worker
