@@ -126,7 +126,6 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
         conf->redis_socket_path.data = redis_socket_path->data;
 
         conf->enabled = 1;
-        ngx_selective_cache_purge_enabled = 1;
     }
 
     ngx_conf_merge_uint_value(conf->redis_port, conf->redis_port, 6379);
