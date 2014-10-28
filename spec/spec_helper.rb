@@ -13,12 +13,16 @@ def proxy_cache_path
   "/tmp/cache"
 end
 
+def redis_unix_socket
+  File.join(NginxTestHelper::Config.nginx_tests_tmp_dir, "selective_cache_purge_redis_test.socket")
+end
+
 def redis_host
   'localhost'
 end
 
 def redis_port
-  6379
+  63790
 end
 
 def redis_database
@@ -93,6 +97,14 @@ RSpec::Matchers.define :have_not_purged_urls do |urls|
 end
 
 RSpec.configure do |config|
+  config.before(:suite) do
+    system("redis-server --port #{redis_port} --unixsocket #{redis_unix_socket} --unixsocketperm 777 --daemonize yes --pidfile #{redis_unix_socket.gsub("socket", "pid")}")
+  end
+
+  config.after(:suite) do
+    system("kill `cat #{redis_unix_socket.gsub("socket", "pid")}`")
+  end
+
   config.before(:each) do
     clear_database
     FileUtils.chmod_R(0700, proxy_cache_path) if File.exists?(proxy_cache_path)
