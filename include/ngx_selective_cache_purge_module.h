@@ -12,6 +12,7 @@
 
 typedef struct {
     ngx_flag_t                enabled;
+    ngx_str_t                 redis_socket_path;
     ngx_str_t                 redis_host;
     ngx_uint_t                redis_port;
     ngx_uint_t                redis_database;

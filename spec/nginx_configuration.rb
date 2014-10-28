@@ -9,6 +9,7 @@ module NginxConfiguration
       additional_config: '',
       worker_processes: 4,
       proxy_cache_path: "/tmp/cache",
+      redis_unix_socket: nil,
       redis_host: redis_host,
       redis_database: redis_database,
       purge_query: "$1%",

@@ -21,6 +21,12 @@ static ngx_str_t SERVER_IS_RESTARTING_MESSAGE = ngx_string("Server is restarting
 ngx_list_t *ngx_selective_cache_purge_shared_memory_list;
 
 static ngx_command_t  ngx_selective_cache_purge_commands[] = {
+    { ngx_string("selective_cache_purge_redis_unix_socket"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_selective_cache_purge_main_conf_t, redis_socket_path),
+      NULL },
     { ngx_string("selective_cache_purge_redis_host"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
@@ -89,6 +95,7 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     }
 
     conf->enabled = 0;
+    conf->redis_socket_path.data = NULL;
     conf->redis_host.data = NULL;
     conf->redis_port = NGX_CONF_UNSET_UINT;
     conf->redis_database = NGX_CONF_UNSET_UINT;
@@ -106,12 +113,20 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
     ngx_selective_cache_purge_main_conf_t     *conf = parent;
 
     if (conf->redis_host.data != NULL) {
-
         ngx_str_t *redis_host = ngx_selective_cache_purge_alloc_str(cf->pool, conf->redis_host.len);
         ngx_snprintf(redis_host->data, conf->redis_host.len, "%V", &conf->redis_host);
         conf->redis_host.data = redis_host->data;
 
         conf->enabled = 1;
+    }
+
+    if (conf->redis_socket_path.data != NULL) {
+        ngx_str_t *redis_socket_path = ngx_selective_cache_purge_alloc_str(cf->pool, conf->redis_socket_path.len);
+        ngx_snprintf(redis_socket_path->data, conf->redis_socket_path.len, "%V", &conf->redis_socket_path);
+        conf->redis_socket_path.data = redis_socket_path->data;
+
+        conf->enabled = 1;
+        ngx_selective_cache_purge_enabled = 1;
     }
 
     ngx_conf_merge_uint_value(conf->redis_port, conf->redis_port, 6379);

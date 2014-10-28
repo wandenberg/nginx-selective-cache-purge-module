@@ -65,6 +65,14 @@ describe "Selective Cache Purge Module" do
       end
       get_database_entries_for(path).should_not be_empty
     end
+
+    it "should save using an unix socket" do
+      path = "/index.html"
+      nginx_run_server(config.merge(redis_host: nil, redis_unix_socket: redis_unix_socket)) do
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '200'
+      end
+      get_database_entries_for(path).should_not be_empty
+    end
   end
 
   context "when purging" do
@@ -181,6 +189,32 @@ describe "Selective Cache Purge Module" do
 
           response.body.should have_purged_urls(purged_urls)
           response.body.should have_not_purged_urls(cached_urls - purged_urls)
+        end
+      end
+
+      it "should remove using an unix socket" do
+        purged_urls = ["/index.html","/index2.html"]
+
+        nginx_run_server(config.merge(redis_host: nil, redis_unix_socket: redis_unix_socket)) do
+          prepare_cache
+          purged_files = get_database_entries_for('/index%').map{ |entry| entry[-1] }
+
+          purged_files.count.should eq 2
+          purged_files.each do |f|
+            File.exists?("#{proxy_cache_path}#{f}").should be_true
+          end
+
+          resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
+          resp.code.should eq '200'
+          resp.body.should have_purged_urls(purged_urls)
+
+          get_database_entries_for('/index%').should be_empty
+          remaining_keys = get_database_entries_for('*').map{ |entry| entry[0] }.sort
+          remaining_keys.should eql(cached_urls - purged_urls)
+
+          purged_files.each do |f|
+            File.exists?("#{proxy_cache_path}#{f}").should be_false
+          end
         end
       end
 

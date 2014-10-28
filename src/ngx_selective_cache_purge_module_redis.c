@@ -1,6 +1,7 @@
 #include <ngx_selective_cache_purge_module_db.h>
 #include <ngx_selective_cache_purge_module_utils.h>
 
+redisAsyncContext *open_context(ngx_selective_cache_purge_main_conf_t *conf, redisAsyncContext **context);
 void scan_callback(redisAsyncContext *c, void *r, void *privdata);
 void scan_by_cache_key_callback(redisAsyncContext *c, void *r, void *privdata);
 ngx_int_t parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
@@ -70,7 +71,7 @@ stub_callback(redisAsyncContext *c, void *rep, void *privdata)
 ngx_int_t
 ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_t *conf, void **context, void *data, void (*callback) (void *))
 {
-    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) context);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -85,7 +86,7 @@ ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_
 ngx_int_t
 ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires, void **context)
 {
-    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) context);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -99,7 +100,7 @@ ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx
 ngx_int_t
 ngx_selective_cache_purge_remove(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, void **context)
 {
-    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) context);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -113,7 +114,7 @@ ngx_selective_cache_purge_remove(ngx_selective_cache_purge_main_conf_t *conf, ng
 void
 ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_main_conf_t *conf, ngx_selective_cache_purge_shm_data_t *data, void (*callback) (ngx_selective_cache_purge_shm_data_t *))
 {
-    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) &sync_contexts[ngx_process_slot]);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &sync_contexts[ngx_process_slot]);
     if (c == NULL) {
         callback(data);
         return;
@@ -145,7 +146,7 @@ select_by_cache_key(ngx_http_request_t *r, char *cursor, void (*callback) (ngx_h
     ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     ngx_selective_cache_purge_main_conf_t    *conf =  ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
 
-    redisAsyncContext *c = redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (redisAsyncContext **) &ctx->context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &ctx->context);
     if (c == NULL) {
         return;
     }
@@ -163,6 +164,17 @@ select_by_cache_key(ngx_http_request_t *r, char *cursor, void (*callback) (ngx_h
     c->data = r;
 
     redisAsyncCommand(c, scan_by_cache_key_callback, redis_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, ctx->purge_query.data, ctx->purge_query.len);
+}
+
+
+redisAsyncContext *
+open_context(ngx_selective_cache_purge_main_conf_t *conf, redisAsyncContext **context)
+{
+    if (conf->redis_host.data != NULL) {
+        return redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, context);
+    } else {
+        return redis_nginx_open_context_unix((const char *) conf->redis_socket_path.data, conf->redis_database, context);
+    }
 }
 
 
