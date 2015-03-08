@@ -81,7 +81,7 @@ typedef struct {
 
 static ngx_selective_cache_purge_main_conf_t *ngx_selective_cache_purge_module_main_conf;
 
-ngx_int_t ngx_selective_cache_purge_header_filter(ngx_http_request_t *r);
+ngx_int_t ngx_selective_cache_purge_indexer_handler(ngx_http_request_t *r);
 ngx_int_t ngx_selective_cache_purge_handler(ngx_http_request_t *r);
 
 ngx_http_output_header_filter_pt ngx_selective_cache_purge_next_header_filter;

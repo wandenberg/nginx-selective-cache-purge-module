@@ -66,6 +66,24 @@ describe "Selective Cache Purge Module" do
       get_database_entries_for(path).should_not be_empty
     end
 
+    it "should ignore when response is not cacheable" do
+      path = "/cookie/index.html"
+      nginx_run_server(config) do
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}").code.should eq '200'
+      end
+      get_database_entries_for(path).should be_empty
+      Dir["#{proxy_cache_path}/*"].should be_empty
+    end
+
+    it "should ignore when request match cache bypass" do
+      path = "/index.html"
+      nginx_run_server(config) do
+        response_for("http://#{nginx_host}:#{nginx_port}#{path}?nocache=1").code.should eq '200'
+      end
+      get_database_entries_for(path).should be_empty
+      Dir["#{proxy_cache_path}/*"].should be_empty
+    end
+
     it "should save using an unix socket" do
       path = "/index.html"
       nginx_run_server(config.merge(redis_host: nil, redis_unix_socket: redis_unix_socket)) do

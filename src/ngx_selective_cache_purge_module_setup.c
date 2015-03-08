@@ -3,7 +3,6 @@
 #include <ngx_selective_cache_purge_module_db.h>
 
 static char *ngx_selective_cache_purge(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-ngx_int_t    ngx_selective_cache_purge_filter_init(ngx_conf_t *cf);
 
 static ngx_int_t ngx_selective_cache_purge_postconfig(ngx_conf_t *cf);
 static void *ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf);
@@ -226,7 +225,8 @@ ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *parent, void *chi
 static ngx_int_t
 ngx_selective_cache_purge_postconfig(ngx_conf_t *cf)
 {
-    ngx_int_t                   rc;
+    ngx_http_handler_pt        *h;
+    ngx_http_core_main_conf_t  *cmcf;
 
     ngx_selective_cache_purge_main_conf_t *conf = ngx_http_conf_get_module_main_conf(cf, ngx_selective_cache_purge_module);
 
@@ -234,10 +234,14 @@ ngx_selective_cache_purge_postconfig(ngx_conf_t *cf)
         return NGX_OK;
     }
 
-    /* register our output filters */
-    if ((rc = ngx_selective_cache_purge_filter_init(cf)) != NGX_OK) {
-        return rc;
+    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
+
+    h = ngx_array_push(&cmcf->phases[NGX_HTTP_LOG_PHASE].handlers);
+    if (h == NULL) {
+        return NGX_ERROR;
     }
+
+    *h = ngx_selective_cache_purge_indexer_handler;
 
     return ngx_selective_cache_purge_set_up_shm(cf);
 }
@@ -369,14 +373,4 @@ ngx_selective_cache_purge(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     clcf->handler = ngx_selective_cache_purge_handler;
 
     return NGX_CONF_OK;
-}
-
-
-ngx_int_t
-ngx_selective_cache_purge_filter_init(ngx_conf_t *cf)
-{
-    ngx_selective_cache_purge_next_header_filter = ngx_http_top_header_filter;
-    ngx_http_top_header_filter = ngx_selective_cache_purge_header_filter;
-
-    return NGX_OK;
 }

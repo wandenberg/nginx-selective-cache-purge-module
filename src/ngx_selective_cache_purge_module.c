@@ -28,19 +28,18 @@ static ngx_str_t SYNC_OPERATION_NOT_START_MESSAGE = ngx_string("Sync will NOT be
 static ngx_str_t NOTHING_TO_DO_MESSAGE = ngx_string("Nothing to be done.\n");
 
 ngx_int_t
-ngx_selective_cache_purge_header_filter(ngx_http_request_t *r)
+ngx_selective_cache_purge_indexer_handler(ngx_http_request_t *r)
 {
     ngx_selective_cache_purge_request_ctx_t *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
-    ngx_int_t ret = ngx_selective_cache_purge_next_header_filter(r);
 
-    if ((ngx_selective_cache_purge_module_main_conf->enabled) && (ctx == NULL)) {
+    if (ctx == NULL) {
         ngx_str_t *cache_key = ngx_selective_cache_purge_get_cache_key(r);
         if (cache_key != NULL) {
             ngx_selective_cache_purge_register_cache_entry(r, cache_key);
         }
     }
 
-    return ret;
+    return NGX_DECLINED;
 }
 
 
@@ -252,7 +251,7 @@ ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r)
     u_char            *p = NULL;
     ngx_str_t         *key = NULL;
 
-    if (r->cache && (r->cache->node != NULL) && (r->cache->file.name.len > 0) && (!r->cache->exists || r->cache->updated)) {
+    if (r->upstream && r->upstream->cacheable && r->cache && (r->cache->node != NULL) && (r->cache->file.name.len > 0) && (!r->cache->exists || r->cache->updated)) {
         key = r->cache->keys.elts;
         for (i = 0; i < r->cache->keys.nelts; i++) {
             len += key[i].len;
