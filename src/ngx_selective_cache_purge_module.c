@@ -107,6 +107,7 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     ctx->request = r;
     ctx->purging_files_event->data = r;
     ctx->redis_ctx = NULL;
+    ngx_queue_init(&ctx->entries);
     ngx_queue_insert_tail(purge_requests_queue, &ctx->queue);
 
     ngx_http_set_ctx(r, ctx, ngx_selective_cache_purge_module);
@@ -116,12 +117,10 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
 
     if (vv_cache_key.len > 0) {
         ctx->force = 1;
-        ctx->purge_query.data = vv_cache_key.data;
-        ctx->purge_query.len = vv_cache_key.len;
+        ctx->purge_query = vv_cache_key;
         ngx_selective_cache_purge_force_remove(r);
     } else {
-        ctx->purge_query.data = vv_purge_query.data;
-        ctx->purge_query.len = vv_purge_query.len;
+        ctx->purge_query = vv_purge_query;
         if (ngx_trylock(&purging[ngx_process_slot])) {
             ngx_selective_cache_purge_select_by_cache_key(r, &ngx_selective_cache_purge_entries_handler);
         }
@@ -147,8 +146,8 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
     }
 #  endif
 
-    if (ctx->entries != NULL) {
-        for (cur = (ctx->last == NULL) ? ngx_queue_head(ctx->entries) : ctx->last; cur != ctx->entries; cur = ngx_queue_next(cur), processed++) {
+    if (!ngx_queue_empty(&ctx->entries)) {
+        for (cur = (ctx->last == NULL) ? ngx_queue_head(&ctx->entries) : ctx->last; cur != ngx_queue_sentinel(&ctx->entries); cur = ngx_queue_next(cur), processed++) {
             entry = ngx_queue_data(cur, ngx_selective_cache_purge_cache_item_t, queue);
             if (!entry->removed) {
                 rc = ngx_selective_cache_purge_remove_cache_entry(conf, r, entry, &ctx->context);
@@ -215,7 +214,7 @@ ngx_selective_cache_purge_send_purge_response(void *d)
         ngx_sprintf(response->data, (char *) OK_MESSAGE.data, &ctx->purge_query);
         ngx_selective_cache_purge_send_response_text(r, response->data, response->len, 0);
 
-        for (cur = ngx_queue_head(ctx->entries); cur != ctx->entries; cur = ngx_queue_next(cur)) {
+        for (cur = ngx_queue_head(&ctx->entries); cur != ngx_queue_sentinel(&ctx->entries); cur = ngx_queue_next(cur)) {
             entry = ngx_queue_data(cur, ngx_selective_cache_purge_cache_item_t, queue);
             if (entry->removed) {
                 ngx_selective_cache_purge_send_response_text(r, entry->cache_key->data, entry->cache_key->len, 0);
@@ -563,7 +562,7 @@ ngx_selective_cache_purge_create_cache_item_for_zone(ngx_rbtree_node_t *v_node, 
     cur->type = node->type;
     cur->path = NULL;
     cur->removed = 0;
-    ngx_queue_insert_tail(ctx->entries, &cur->queue);
+    ngx_queue_insert_tail(&ctx->entries, &cur->queue);
 
     return NGX_OK;
 }
@@ -614,16 +613,6 @@ static void
 ngx_selective_cache_purge_force_remove(ngx_http_request_t *r)
 {
     ngx_selective_cache_purge_shm_data_t    *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
-    ngx_selective_cache_purge_request_ctx_t *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
-
-    if (ctx->entries == NULL) {
-        if ((ctx->entries = (ngx_queue_t *) ngx_palloc(r->pool, sizeof(ngx_queue_t))) == NULL) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not allocate memory to queue sentinel");
-            ngx_selective_cache_purge_entries_handler(r);
-            return;
-        }
-        ngx_queue_init(ctx->entries);
-    }
 
     ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, (void *) r, ngx_selective_cache_purge_create_cache_item_for_zone);
 

@@ -42,7 +42,7 @@ typedef struct {
 } ngx_selective_cache_purge_redis_ctx_t;
 
 typedef struct {
-    ngx_queue_t              *entries;
+    ngx_queue_t               entries;
     ngx_str_t                 purge_query;
     ngx_flag_t                remove_any_entry;
     ngx_flag_t                force;

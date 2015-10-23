@@ -227,17 +227,8 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
     }
 
     if (reply->element[1]->elements > 0) {
-        if (ctx->entries == NULL) {
-            if ((ctx->entries = (ngx_queue_t *) ngx_palloc(r->pool, sizeof(ngx_queue_t))) == NULL) {
-                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not allocate memory to queue sentinel");
-                ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
-                return;
-            }
-            ngx_queue_init(ctx->entries);
-        }
-
         for (i = 0; i < reply->element[1]->elements; i++) {
-            if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, ctx->entries, r->pool) != NGX_OK) {
+            if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, &ctx->entries, r->pool) != NGX_OK) {
                 ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
                 return;
             }
