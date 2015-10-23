@@ -551,8 +551,6 @@ ngx_selective_cache_purge_create_cache_item_for_zone(ngx_rbtree_node_t *v_node, 
         return NGX_ERROR;
     }
 
-    ngx_create_hashed_filename(cache->path, filename_data, len);
-
     if ((cur->filename = ngx_selective_cache_purge_alloc_str(r->pool, len - cache->path->name.len)) == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory for file info");
         return NGX_ERROR;
