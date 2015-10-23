@@ -51,6 +51,31 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     ngx_str_t                                vv_purge_query = ngx_null_string, vv_sync = ngx_null_string, vv_cache_key = ngx_null_string, *message;
     ngx_pool_cleanup_t                      *cln;
 
+    if (ngx_http_arg(r, SYNC.data, SYNC.len, &vv_sync) == NGX_OK) {
+        message = &NOTHING_TO_DO_MESSAGE;
+        if (ngx_atoi(vv_sync.data, vv_sync.len) == 1) {
+            switch (ngx_selective_cache_purge_sync_memory_to_database()) {
+            case NGX_ERROR:
+                message = &SYNC_OPERATION_NOT_START_MESSAGE;
+                break;
+            case NGX_DECLINED:
+                message = &SYNC_OPERATION_PROGRESS_MESSAGE;
+                break;
+            default:
+                message = &SYNC_OPERATION_START_MESSAGE;
+                break;
+            }
+        }
+        return ngx_selective_cache_purge_send_response(r, message->data, message->len, NGX_HTTP_OK, &CONTENT_TYPE);
+    }
+
+    ngx_http_arg(r, CACHE_KEY.data, CACHE_KEY.len, &vv_cache_key);
+    ngx_http_complex_value(r, conf->purge_query, &vv_purge_query);
+    if ((vv_purge_query.len == 0) && (vv_cache_key.len == 0)) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: purge_query is empty");
+        return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_BAD_REQUEST, &CONTENT_TYPE);
+    }
+
     if (ngx_http_discard_request_body(r) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: could not discard body");
         return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
@@ -85,31 +110,6 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     ngx_queue_insert_tail(purge_requests_queue, &ctx->queue);
 
     ngx_http_set_ctx(r, ctx, ngx_selective_cache_purge_module);
-
-    if (ngx_http_arg(r, SYNC.data, SYNC.len, &vv_sync) == NGX_OK) {
-        message = &NOTHING_TO_DO_MESSAGE;
-        if (ngx_atoi(vv_sync.data, vv_sync.len) == 1) {
-            switch (ngx_selective_cache_purge_sync_memory_to_database()) {
-                case NGX_ERROR:
-                    message = &SYNC_OPERATION_NOT_START_MESSAGE;
-                    break;
-                case NGX_DECLINED:
-                    message = &SYNC_OPERATION_PROGRESS_MESSAGE;
-                    break;
-                default:
-                    message = &SYNC_OPERATION_START_MESSAGE;
-                    break;
-            }
-        }
-        return ngx_selective_cache_purge_send_response(r, message->data, message->len, NGX_HTTP_OK, &CONTENT_TYPE);
-    }
-
-    ngx_http_arg(r, CACHE_KEY.data, CACHE_KEY.len, &vv_cache_key);
-    ngx_http_complex_value(r, conf->purge_query, &vv_purge_query);
-    if ((vv_purge_query.len == 0) && (vv_cache_key.len == 0)) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: purge_query is empty");
-        return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_BAD_REQUEST, &CONTENT_TYPE);
-    }
 
     r->main->count++;
     r->read_event_handler = ngx_http_test_reading;
