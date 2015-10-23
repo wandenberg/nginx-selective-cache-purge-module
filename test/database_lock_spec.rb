@@ -1,4 +1,4 @@
-require "spec_helper"
+require File.expand_path("./spec_helper", File.dirname(__FILE__))
 
 describe "Selective Cache Purge Module Database Lock" do
   let!(:config) do
@@ -32,7 +32,7 @@ describe "Selective Cache Purge Module Database Lock" do
       nginx_run_server(config, timeout: 200) do
         number_of_requests = 200
         run_concurrent_requests_check(number_of_requests) do
-          get_database_entries_for('*').count.should eql(number_of_requests)
+          expect(get_database_entries_for('*').count).to eql(number_of_requests)
         end
       end
     end
@@ -42,7 +42,7 @@ describe "Selective Cache Purge Module Database Lock" do
         number_of_requests = 200
         run_concurrent_requests_check(number_of_requests) do
           run_concurrent_requests_check(number_of_requests, "/purge") do
-            get_database_entries_for('*').count.should eql(0)
+            expect(get_database_entries_for('*').count).to eql(0)
           end
         end
       end

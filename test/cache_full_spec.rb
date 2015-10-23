@@ -1,4 +1,4 @@
-require "spec_helper"
+require File.expand_path("./spec_helper", File.dirname(__FILE__))
 
 describe "Selective Cache Purge Module Cache Full" do
   let!(:config) do
@@ -21,8 +21,8 @@ describe "Selective Cache Purge Module Cache Full" do
       response_for("http://#{nginx_host}:#{nginx_port}/to/set/cache/full#{start + i}.html")
     end
     final = get_database_entries_for("*").count
-    final.should eql(initial + number_of_requests)
-    cached_files.count.should be > expected_cached_files # max_size / page_size
+    expect(final).to eql(initial + number_of_requests)
+    expect(cached_files.count).to be > expected_cached_files # max_size / page_size
     count = 0
     while (total = cached_files.count) > expected_cached_files # max_size / page_size
       sleep 1
@@ -36,7 +36,7 @@ describe "Selective Cache Purge Module Cache Full" do
       nginx_run_server(config, timeout: 60) do |conf|
         rotate_cache
 
-        response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}").code.should eql('404')
+        expect(response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}").code).to eql('404')
 
         rotate_cache(1001)
       end
@@ -49,7 +49,7 @@ describe "Selective Cache Purge Module Cache Full" do
         rotate_cache
 
         response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}")
-        get_database_entries_for(url_to_purge).count.should eql(0)
+        expect(get_database_entries_for(url_to_purge).count).to eql(0)
 
         rotate_cache(1001)
       end
@@ -64,7 +64,7 @@ describe "Selective Cache Purge Module Cache Full" do
         response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}")
 
         expect{ rotate_cache(1001) }.to_not raise_error
-        cached_files.count.should be < 256
+        expect(cached_files.count).to be < 256
       end
     end
   end
@@ -79,8 +79,8 @@ describe "Selective Cache Purge Module Cache Full" do
           rotate_cache
 
           resp = response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}")
-          resp.code.should eql('200')
-          resp.body.should have_purged_urls([url_to_purge])
+          expect(resp.code).to eql('200')
+          expect(resp.body).to have_purged_urls([url_to_purge])
 
           rotate_cache(1001)
         end
@@ -118,7 +118,7 @@ describe "Selective Cache Purge Module Cache Full" do
           end
 
           expect{ rotate_cache(1001) }.to_not raise_error
-          cached_files.count.should be < 256
+          expect(cached_files.count).to be < 256
         end
       end
     end
@@ -133,8 +133,8 @@ describe "Selective Cache Purge Module Cache Full" do
           rotate_cache
 
           resp = response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}")
-          resp.code.should eql('200')
-          resp.body.should have_purged_urls([
+          expect(resp.code).to eql('200')
+          expect(resp.body).to have_purged_urls([
             "/to/set/cache/full990.html",
             "/to/set/cache/full991.html",
             "/to/set/cache/full992.html",
@@ -171,8 +171,8 @@ describe "Selective Cache Purge Module Cache Full" do
           rotate_cache
 
           resp = response_for("http://#{nginx_host}:#{nginx_port}/purge#{url_to_purge}")
-          resp.code.should eql('200')
-          resp.body.should have_purged_urls([
+          expect(resp.code).to eql('200')
+          expect(resp.body).to have_purged_urls([
             "/to/set/cache/full746.html",
             "/to/set/cache/full747.html",
             "/to/set/cache/full748.html",
@@ -204,7 +204,7 @@ describe "Selective Cache Purge Module Cache Full" do
           response_for("http://#{nginx_host}:#{nginx_port}/purge/*")
 
           expect{ rotate_cache(1001) }.to_not raise_error
-          cached_files.count.should be < 256
+          expect(cached_files.count).to be < 256
         end
       end
     end
@@ -231,9 +231,9 @@ describe "Selective Cache Purge Module Cache Full" do
             req.callback do
               timer.cancel
               sleep 1.5
-              cached_files.count.should be_within(5).of(0)
-              request_sent.should be > 10
-              request_received.should be_within(5).of(request_sent)
+              expect(cached_files.count).to be_within(5).of(0)
+              expect(request_sent).to be > 10
+              expect(request_received).to be_within(5).of(request_sent)
               EventMachine.stop
             end
           end
@@ -247,7 +247,7 @@ describe "Selective Cache Purge Module Cache Full" do
           nginx_run_server(config.merge(max_size: "4m"), timeout: 60) do |conf|
             rotate_cache(1, 1024)
             initial_size = cached_files.count
-            initial_size.should eq 1023
+            expect(initial_size).to eq 1023
 
             EventMachine.run do
               req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", inactivity_timeout: 0.005).get
@@ -257,10 +257,10 @@ describe "Selective Cache Purge Module Cache Full" do
               end
               req.errback do
                 final_size = cached_files.count
-                final_size.should eql initial_size
+                expect(final_size).to eql initial_size
 
                 EM.add_timer(1) do
-                  final_size.should eql initial_size
+                  expect(final_size).to eql initial_size
                   EventMachine.stop
                 end
               end
@@ -274,7 +274,7 @@ describe "Selective Cache Purge Module Cache Full" do
           nginx_run_server(config.merge(max_size: "4m"), timeout: 60) do |conf|
             rotate_cache(1, 1024)
             initial_size = cached_files.count
-            initial_size.should eq 1023
+            expect(initial_size).to eq 1023
 
             EventMachine.run do
               req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", inactivity_timeout: 0.5).get
@@ -284,11 +284,11 @@ describe "Selective Cache Purge Module Cache Full" do
               end
               req.errback do
                 final_size = cached_files.count
-                final_size.should be > 0
-                final_size.should be < initial_size
+                expect(final_size).to be > 0
+                expect(final_size).to be < initial_size
 
                 EM.add_timer(1) do
-                  cached_files.count.should eq final_size
+                  expect(cached_files.count).to eq final_size
                   EventMachine.stop
                 end
               end

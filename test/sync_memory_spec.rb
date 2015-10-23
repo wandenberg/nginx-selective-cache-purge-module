@@ -1,4 +1,4 @@
-require "spec_helper"
+require File.expand_path("./spec_helper", File.dirname(__FILE__))
 
 describe "Selective Cache Purge Module Sync Memory" do
   let!(:config) do
@@ -11,7 +11,7 @@ describe "Selective Cache Purge Module Sync Memory" do
     FileUtils.rm_rf Dir["#{proxy_cache_path}_2/**"]
     FileUtils.mkdir_p "#{proxy_cache_path}_2"
 
-    Zip::File.open(File.expand_path('../spec/assets/cache.zip', File.dirname(__FILE__))) do |zipfile|
+    Zip::File.open(File.expand_path('./assets/cache.zip', File.dirname(__FILE__))) do |zipfile|
       zipfile.restore_permissions = true
       zipfile.each do |file|
         FileUtils.mkdir_p File.dirname("#{proxy_cache_path}/#{file}")
@@ -43,7 +43,7 @@ describe "Selective Cache Purge Module Sync Memory" do
           count = get_database_entries_for('*').count
           if count >= number_of_files_on_cache
             timer.cancel
-            request_received.should be_within(5).of(request_sent)
+            expect(request_received).to be_within(5).of(request_sent)
             EventMachine.stop
           end
         end
@@ -76,8 +76,8 @@ describe "Selective Cache Purge Module Sync Memory" do
           count = get_database_entries_for('*').count
           if count >= number_of_files_on_cache
             sleep 1.5
-            get_database_entries_for_zone('unkown_zone').count.should eql(0)
-            get_database_entries_for_zone('zone').count.should eql(number_of_files_on_cache)
+            expect(get_database_entries_for_zone('unkown_zone').count).to eql(0)
+            expect(get_database_entries_for_zone('zone').count).to eql(number_of_files_on_cache)
             EventMachine.stop
           end
         end

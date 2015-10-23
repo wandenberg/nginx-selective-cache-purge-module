@@ -118,11 +118,11 @@ Running tests
 
 This project uses [nginx_test_helper](https://github.com/wandenberg/nginx_test_helper) on the test suite. So, after you've installed the module, you can just install the necessary gems:
 
-    $ bundle install
+    $ bundle install --gemfile=test/Gemfile
 
 And run rspec pointing to where your Nginx binary is (default: /usr/local/nginx/sbin/nginx):
 
-    $ NGINX_EXEC=/path/to/nginx rspec spec/
+    $ NGINX_EXEC=/path/to/nginx rspec test/
 
 
 Changelog

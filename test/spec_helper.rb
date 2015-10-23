@@ -1,6 +1,6 @@
 require 'rubygems'
 # Set up gems listed in the Gemfile.
-ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../Gemfile', File.dirname(__FILE__))
+ENV['BUNDLE_GEMFILE'] ||= File.expand_path('Gemfile', File.dirname(__FILE__))
 require 'bundler/setup' if File.exists?(ENV['BUNDLE_GEMFILE'])
 Bundler.require(:default, :test) if defined?(Bundler)
 
@@ -62,11 +62,11 @@ RSpec::Matchers.define :have_purged_urls do |urls|
     end
   end
 
-  failure_message_for_should do |actual|
+  failure_message do |actual|
     "expected that #{actual} would #{description}"
   end
 
-  failure_message_for_should_not do |actual|
+  failure_message_when_negated do |actual|
     "expected that #{actual} would not #{description}"
   end
 
@@ -83,11 +83,11 @@ RSpec::Matchers.define :have_not_purged_urls do |urls|
     end
   end
 
-  failure_message_for_should do |actual|
+  failure_message do |actual|
     "expected that #{actual} would not #{description}"
   end
 
-  failure_message_for_should_not do |actual|
+  failure_message_when_negated do |actual|
     "expected that #{actual} would #{description}"
   end
 
@@ -118,7 +118,6 @@ RSpec.configure do |config|
     @redis = nil
   end
   config.order = "random"
-  config.treat_symbols_as_metadata_keys_with_true_values = true
   config.run_all_when_everything_filtered = true
 end
 
