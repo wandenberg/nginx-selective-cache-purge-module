@@ -1,7 +1,7 @@
 Nginx Selective Cache Purge Module
 ==================================
 
-A module to purge cache by GLOB patterns.
+A module to purge cache by GLOB patterns. The supported patterns are the same as supported by [Redis](http://redis.io/commands/KEYS).
 
 _This module is not distributed with the Nginx source. See [the installation instructions](#installation)._
 
@@ -50,6 +50,7 @@ An example:
             listen          8080;
             server_name     localhost;
 
+            # purging by prefix
             location ~ /purge(.*) {
                 selective_cache_purge_query "$1*";
             }
@@ -67,6 +68,7 @@ An example:
             listen          8090;
             server_name     localhost;
 
+            # purging by extension
             location ~ /purge/.*(\..*)$ {
                 #purge by extension
                 selective_cache_purge_query "*$1";
@@ -101,13 +103,12 @@ This module requires:
 - hiredis 0.11.0. Install it with your favourite package manager - apt-get, yum, brew - or download [hiredis](https://github.com/redis/hiredis/releases) and compile it.
 - [redis_nginx_adapter](https://github.com/wandenberg/redis_nginx_adapter) library
 
-[Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it (ex.: to ../nginx). You must then run ./configure with --add-module pointing to this project as usual, referencing the up-to-date hiredis lib and include if they are not on your default lib and include folders. Something in the lines of:
+[Download Nginx Stable](http://nginx.org/en/download.html) source and uncompress it. You must then run ./configure with --add-module pointing to this project as usual, referencing the up-to-date hiredis/redis_nginx_adapter lib and include if they are not on your default lib and include folders. Something in the lines of:
 
-    $ ./configure \\
-        --with-ld-opt='-L/usr/lib/' \\
-        --with-cc-opt='-I/usr/include/hiredis/' \\
-        --add-module=../nginx-selective-cache-purge-module \\
-        --prefix=/home/user/dev-workspace/nginx
+    $ ./configure \
+        --with-ld-opt='-L/usr/lib/ ' \
+        --with-cc-opt='-I/usr/include/hiredis/ ' \
+        --add-module=/path/to/nginx-selective-cache-purge-module
     $ make
     $ make install
 
@@ -115,24 +116,16 @@ This module requires:
 Running tests
 -------------
 
-This project uses [nginx_test_helper](https://github.com/wandenberg/nginx_test_helper) on the test suite. So, after you've installed the module, you can just download the necessary gems:
+This project uses [nginx_test_helper](https://github.com/wandenberg/nginx_test_helper) on the test suite. So, after you've installed the module, you can just install the necessary gems:
 
     $ bundle install
 
 And run rspec pointing to where your Nginx binary is (default: /usr/local/nginx/sbin/nginx):
 
-    $ NGINX_EXEC=../path/to/my/nginx rspec spec/
-
-Also included in the project is a Rakefile that can be used to build nginx with only this module and run the test suite. The rake tasks can be found using the command:
-
-    $ rake -T
-
-To build and run rspec automatically using rake, you need to define where nginx sources are located (NGINX_SRC_DIR) and where it should be installed after built (NGINX_PREFIX_DIR, defaults to /tmp/nginx_tests/nginx):
-
-    $ NGINX_SRC_DIR=/path/to/nginx/sources NGINX_PREFIX_DIR=/tmp/nginx_tests/nginx rake spec
+    $ NGINX_EXEC=/path/to/nginx rspec spec/
 
 
 Changelog
 ---------
 
-This is still a work in progress. Be the change. And take a look on the Changelog file.
+This is still a work in progress. Be the change. And take a look on the [Changelog](Changelog.md).
