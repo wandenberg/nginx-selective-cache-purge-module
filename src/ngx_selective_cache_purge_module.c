@@ -4,7 +4,7 @@
 
 ngx_str_t        *ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t *cache_key);
-ngx_int_t         ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry, void **context);
+ngx_int_t         ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry, ngx_selective_cache_purge_db_ctx_t *db_ctx);
 void              ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_send_purge_response(void *d);
 static void       ngx_selective_cache_purge_force_remove(ngx_http_request_t *r);
@@ -112,6 +112,13 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
 
     ngx_http_set_ctx(r, ctx, ngx_selective_cache_purge_module);
 
+    if ((ctx->db_ctx = ngx_selective_cache_purge_init_db_context()) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_selective_cache_purge: unable to initialize a db context");
+        return ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
+    }
+
+    ctx->db_ctx->data = r;
+
     r->main->count++;
     r->read_event_handler = ngx_http_test_reading;
 
@@ -150,7 +157,7 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
         for (cur = (ctx->last == NULL) ? ngx_queue_head(&ctx->entries) : ctx->last; cur != ngx_queue_sentinel(&ctx->entries); cur = ngx_queue_next(cur), processed++) {
             entry = ngx_queue_data(cur, ngx_selective_cache_purge_cache_item_t, queue);
             if (!entry->removed) {
-                rc = ngx_selective_cache_purge_remove_cache_entry(conf, r, entry, &ctx->context);
+                rc = ngx_selective_cache_purge_remove_cache_entry(conf, r, entry, ctx->db_ctx);
 
                 switch (rc) {
                 case NGX_OK:
@@ -191,6 +198,8 @@ ngx_selective_cache_purge_send_purge_response(void *d)
     ngx_int_t                                rc;
 
     r->write_event_handler = ngx_http_request_empty_handler;
+
+    ngx_selective_cache_purge_destroy_db_context(&ctx->db_ctx);
 
     if (ctx->remove_any_entry) {
         if (r->method == NGX_HTTP_HEAD) {
@@ -292,7 +301,7 @@ ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t 
 
 
 ngx_int_t
-ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry, void **context)
+ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf_t *conf, ngx_http_request_t *r, ngx_selective_cache_purge_cache_item_t *entry, ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
     ngx_selective_cache_purge_zone_t *cache_zone = NULL;
     ngx_http_file_cache_t      *cache = NULL;
@@ -322,7 +331,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
     if ((fcn == NULL) && (r != NULL)) {
         if (ngx_selective_cache_purge_file_cache_lookup_on_disk(r, cache, entry->cache_key, key) != NGX_OK) {
             if (ngx_errno == NGX_ENOENT) {
-                ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context);
+                ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, db_ctx);
             }
             return NGX_DECLINED;
         }
@@ -338,7 +347,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
             /* race between concurrent purges, backoff */
             ngx_shmtx_unlock(&cache->shpool->mutex);
             if (!fcn->deleting) {
-                ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context);
+                ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, db_ctx);
             }
             return NGX_DECLINED;
         }
@@ -364,7 +373,7 @@ ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_main_conf
         }
 
         if ((err == 0) || (err == NGX_ENOENT)) {
-            if (ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, context) == NGX_OK) {
+            if (ngx_selective_cache_purge_remove(conf, entry->zone, entry->type, entry->cache_key, entry->filename, db_ctx) == NGX_OK) {
                 if (err == 0) {
                   entry->removed = 1;
                 }
@@ -394,7 +403,12 @@ ngx_selective_cache_purge_sync_memory_to_database(void)
     if (ngx_trylock(&data->syncing)) {
         ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process started");
 
-        redis_nginx_force_close_context((redisAsyncContext **) &sync_contexts[ngx_process_slot]);
+        if (sync_db_ctx == NULL) {
+            if ((sync_db_ctx = ngx_selective_cache_purge_init_db_context()) == NULL) {
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory to sync_db_ctx");
+                return NGX_ERROR;
+            }
+        }
         data->zones = 0;
         data->zones_to_sync = 0;
         ngx_queue_init(&data->files_info_to_renew_queue);
@@ -589,6 +603,11 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
         }
         ctx->redis_ctx = NULL;
 
+        if (ctx->db_ctx != NULL) {
+            ctx->db_ctx->data = NULL;
+            ngx_selective_cache_purge_destroy_db_context(&ctx->db_ctx);
+        }
+
         if (ctx->purging && !ctx->force) {
 
             for (q = ngx_queue_head(purge_requests_queue); q != ngx_queue_sentinel(purge_requests_queue); q = ngx_queue_next(q)) {
@@ -778,13 +797,13 @@ ngx_selective_cache_purge_remove_old_entries(void *d)
         ngx_selective_cache_purge_cache_item_t *ci = ngx_queue_data(q, ngx_selective_cache_purge_cache_item_t, queue);
         ci->removed = 0;
 
-        if (ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_module_main_conf, NULL, ci, &sync_contexts[ngx_process_slot]) != NGX_ERROR) {
-            ngx_selective_cache_purge_remove(ngx_selective_cache_purge_module_main_conf, ci->zone, ci->type, ci->cache_key, ci->filename, &sync_contexts[ngx_process_slot]);
+        if (ngx_selective_cache_purge_remove_cache_entry(ngx_selective_cache_purge_module_main_conf, NULL, ci, sync_db_ctx) != NGX_ERROR) {
+            ngx_selective_cache_purge_remove(ngx_selective_cache_purge_module_main_conf, ci->zone, ci->type, ci->cache_key, ci->filename, sync_db_ctx);
         }
 
         ngx_queue_remove(q);
         if ((count++ >= 50) || ngx_queue_empty(sync_queue_entries[ngx_process_slot])) {
-            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &sync_contexts[ngx_process_slot], data, &ngx_selective_cache_purge_remove_old_entries) != NGX_OK) {
+            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &sync_db_ctx->connection, data, &ngx_selective_cache_purge_remove_old_entries) != NGX_OK) {
                 ngx_selective_cache_purge_remove_old_entries(data);
             }
             return;
@@ -811,20 +830,20 @@ ngx_selective_cache_purge_renew_entries(void *d)
     while (!ngx_queue_empty(&data->files_info_to_renew_queue) && (q = ngx_queue_last(&data->files_info_to_renew_queue))) {
         ngx_selective_cache_purge_cache_item_t *ci = ngx_queue_data(q, ngx_selective_cache_purge_cache_item_t, queue);
 
-        if (ngx_selective_cache_purge_store(ngx_selective_cache_purge_module_main_conf, ci->zone, ci->type, ci->cache_key, ci->filename, ci->expire, &sync_contexts[ngx_process_slot]) != NGX_OK) {
+        if (ngx_selective_cache_purge_store(ngx_selective_cache_purge_module_main_conf, ci->zone, ci->type, ci->cache_key, ci->filename, ci->expire, &sync_db_ctx->connection) != NGX_OK) {
             break;
         }
 
         ngx_queue_remove(q);
         if ((count++ >= 50) || ngx_queue_empty(&data->files_info_to_renew_queue)) {
-            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &sync_contexts[ngx_process_slot], data, &ngx_selective_cache_purge_renew_entries) != NGX_OK) {
+            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &sync_db_ctx->connection, data, &ngx_selective_cache_purge_renew_entries) != NGX_OK) {
                 ngx_selective_cache_purge_renew_entries(data);
             }
             return;
         }
     }
 
-    redis_nginx_force_close_context((redisAsyncContext **) &sync_contexts[ngx_process_slot]);
+    ngx_selective_cache_purge_destroy_db_context(&sync_db_ctx);
 
     if (sync_temp_pool[ngx_process_slot] != NULL) {
         ngx_destroy_pool(sync_temp_pool[ngx_process_slot]);

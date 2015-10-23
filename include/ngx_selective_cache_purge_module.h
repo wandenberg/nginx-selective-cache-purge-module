@@ -11,6 +11,12 @@
 #include <redis_nginx_adapter.h>
 
 typedef struct {
+    void                     *connection;
+    void                     *data;
+    void                      (*callback) (void *);
+} ngx_selective_cache_purge_db_ctx_t;
+
+typedef struct {
     ngx_flag_t                enabled;
     ngx_str_t                 redis_socket_path;
     ngx_str_t                 redis_host;
@@ -53,6 +59,7 @@ typedef struct {
     ngx_queue_t              *last;
     ngx_event_t              *purging_files_event;
     ngx_selective_cache_purge_redis_ctx_t   *redis_ctx;
+    ngx_selective_cache_purge_db_ctx_t      *db_ctx;
 } ngx_selective_cache_purge_request_ctx_t;
 
 typedef struct {
@@ -91,7 +98,7 @@ ngx_shm_zone_t *ngx_selective_cache_purge_shm_zone = NULL;
 static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cache_purge_module");
 
 void *contexts[NGX_MAX_PROCESSES];
-void *sync_contexts[NGX_MAX_PROCESSES];
+ngx_selective_cache_purge_db_ctx_t *sync_db_ctx;
 ngx_pool_t *sync_temp_pool[NGX_MAX_PROCESSES];
 ngx_queue_t *sync_queue_entries[NGX_MAX_PROCESSES];
 ngx_atomic_t purging[NGX_MAX_PROCESSES];
