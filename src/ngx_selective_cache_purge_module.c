@@ -296,7 +296,7 @@ ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t 
     ngx_str_t *filename = ngx_selective_cache_purge_alloc_str(r->pool, r->cache->file.name.len - r->cache->file_cache->path->name.len);
     if ((type != NULL) && (filename != NULL)) {
         ngx_memcpy(filename->data, r->cache->file.name.data + r->cache->file_cache->path->name.len, filename->len);
-        ngx_selective_cache_purge_store(conf, zone, type, cache_key, filename, expires, &contexts[ngx_process_slot]);
+        ngx_selective_cache_purge_store(conf, zone, type, cache_key, filename, expires, db_ctxs[ngx_process_slot]);
     }
 #endif
 }
@@ -448,7 +448,11 @@ ngx_selective_cache_purge_zone_init(ngx_rbtree_node_t *v_node, void *data)
     d->zones_to_sync++;
     node->count = 0;
     node->read_memory = 1;
-    node->context = NULL;
+
+    if ((node->db_ctx = ngx_selective_cache_purge_init_db_context()) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory for sync db context");
+        return NGX_ERROR;
+    }
 
     if ((node->sync_database_event = ngx_pcalloc(sync_temp_pool[ngx_process_slot], sizeof(ngx_event_t))) == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory for sync database event");
@@ -747,7 +751,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
             break;
         }
 
-        if (ngx_selective_cache_purge_store(ngx_selective_cache_purge_module_main_conf, node->name, node->type, ci->cache_key, ci->filename, ci->expire, &node->context) != NGX_OK) {
+        if (ngx_selective_cache_purge_store(ngx_selective_cache_purge_module_main_conf, node->name, node->type, ci->cache_key, ci->filename, ci->expire, node->db_ctx) != NGX_OK) {
             ngx_log_error(NGX_LOG_CRIT, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: could not store entry");
             break;
         }
@@ -757,7 +761,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
 
         loaded++;
         if ((loaded >= 50) || ngx_queue_empty(&node->files_info_queue)) {
-            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &node->context, node, &ngx_selective_cache_purge_store_new_entries) != NGX_OK) {
+            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &node->db_ctx->connection, node, &ngx_selective_cache_purge_store_new_entries) != NGX_OK) {
                 ngx_selective_cache_purge_store_new_entries(node);
             }
             return;
@@ -771,7 +775,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
 
     if (!node->read_memory && (node->count <= 0)) {
         data->zones_to_sync--;
-        redis_nginx_force_close_context((redisAsyncContext **) &node->context);
+        ngx_selective_cache_purge_destroy_db_context(&node->db_ctx);
         ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync for zone %V from memory to database finished", node->name);
     }
 
@@ -828,7 +832,7 @@ ngx_selective_cache_purge_renew_entries(void *d)
     while (!ngx_queue_empty(&data->files_info_to_renew_queue) && (q = ngx_queue_last(&data->files_info_to_renew_queue))) {
         ngx_selective_cache_purge_cache_item_t *ci = ngx_queue_data(q, ngx_selective_cache_purge_cache_item_t, queue);
 
-        if (ngx_selective_cache_purge_store(ngx_selective_cache_purge_module_main_conf, ci->zone, ci->type, ci->cache_key, ci->filename, ci->expire, &sync_db_ctx->connection) != NGX_OK) {
+        if (ngx_selective_cache_purge_store(ngx_selective_cache_purge_module_main_conf, ci->zone, ci->type, ci->cache_key, ci->filename, ci->expire, sync_db_ctx) != NGX_OK) {
             break;
         }
 

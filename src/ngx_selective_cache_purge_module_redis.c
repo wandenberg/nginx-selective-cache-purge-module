@@ -38,12 +38,16 @@ ngx_selective_cache_purge_init_db(ngx_cycle_t *cycle)
     }
     redis_key_regex = rc->regex;
 
+
+    if ((db_ctxs[ngx_process_slot] = ngx_calloc(sizeof(ngx_selective_cache_purge_db_ctx_t), cycle->log)) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory to db_ctx");
+        return NGX_ERROR;
+    }
+
     if ((sync_db_ctx = ngx_calloc(sizeof(ngx_selective_cache_purge_db_ctx_t), cycle->log)) == NULL) {
         ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory to sync_db_ctx");
         return NGX_ERROR;
     }
-
-    contexts[ngx_process_slot] = NULL;
 
     redis_nginx_init();
 
@@ -54,8 +58,8 @@ ngx_selective_cache_purge_init_db(ngx_cycle_t *cycle)
 ngx_int_t
 ngx_selective_cache_purge_finish_db(ngx_cycle_t *cycle)
 {
-    redis_nginx_force_close_context((redisAsyncContext **) &contexts[ngx_process_slot]);
     ngx_selective_cache_purge_destroy_db_context(&sync_db_ctx);
+    ngx_selective_cache_purge_destroy_db_context(&db_ctxs[ngx_process_slot]);
 
     return NGX_OK;
 }
@@ -88,9 +92,9 @@ ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_
 
 
 ngx_int_t
-ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires, void **context)
+ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires, ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return NGX_ERROR;
     }

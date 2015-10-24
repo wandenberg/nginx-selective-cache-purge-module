@@ -67,7 +67,7 @@ typedef struct {
     ngx_queue_t               files_info_queue;
     ngx_flag_t                read_memory;
     ngx_uint_t                count;
-    void                     *context;
+    ngx_selective_cache_purge_db_ctx_t      *db_ctx;
     ngx_http_file_cache_node_t *last;
 } ngx_selective_cache_purge_zone_t;
 
@@ -91,7 +91,7 @@ ngx_shm_zone_t *ngx_selective_cache_purge_shm_zone = NULL;
 
 static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cache_purge_module");
 
-void *contexts[NGX_MAX_PROCESSES];
+ngx_selective_cache_purge_db_ctx_t *db_ctxs[NGX_MAX_PROCESSES];
 ngx_selective_cache_purge_db_ctx_t *sync_db_ctx;
 ngx_pool_t *sync_temp_pool[NGX_MAX_PROCESSES];
 ngx_queue_t *sync_queue_entries[NGX_MAX_PROCESSES];
