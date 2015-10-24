@@ -46,10 +46,8 @@ typedef struct {
     ngx_queue_t               entries;
     ngx_str_t                 purge_query;
     ngx_flag_t                remove_any_entry;
-    ngx_flag_t                force;
     ngx_flag_t                purging;
     ngx_queue_t               queue;
-    ngx_http_request_t       *request;
     ngx_queue_t              *last;
     ngx_event_t              *purging_files_event;
     ngx_selective_cache_purge_db_ctx_t      *db_ctx;
