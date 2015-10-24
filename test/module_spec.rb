@@ -130,7 +130,7 @@ describe "Selective Cache Purge Module" do
 
         nginx_run_server(config) do
           prepare_cache
-          purged_files = get_database_entries_for('/index%').map{ |entry| entry[-1] }
+          purged_files = get_database_entries_for('/index*').map{ |entry| entry[-1] }
 
           expect(purged_files.count).to eq 2
           purged_files.each do |f|
@@ -141,7 +141,7 @@ describe "Selective Cache Purge Module" do
           expect(resp.code).to eq '200'
           expect(resp.body).to have_purged_urls(purged_urls)
 
-          expect(get_database_entries_for('/index%')).to be_empty
+          expect(get_database_entries_for('/index*')).to be_empty
           remaining_keys = get_database_entries_for('*').map{ |entry| entry[0] }.sort
           expect(remaining_keys).to eql(cached_urls - purged_urls)
 
@@ -215,7 +215,7 @@ describe "Selective Cache Purge Module" do
 
         nginx_run_server(config.merge(redis_host: nil, redis_unix_socket: redis_unix_socket)) do
           prepare_cache
-          purged_files = get_database_entries_for('/index%').map{ |entry| entry[-1] }
+          purged_files = get_database_entries_for('/index*').map{ |entry| entry[-1] }
 
           expect(purged_files.count).to eq 2
           purged_files.each do |f|
@@ -226,7 +226,7 @@ describe "Selective Cache Purge Module" do
           expect(resp.code).to eq '200'
           expect(resp.body).to have_purged_urls(purged_urls)
 
-          expect(get_database_entries_for('/index%')).to be_empty
+          expect(get_database_entries_for('/index*')).to be_empty
           remaining_keys = get_database_entries_for('*').map{ |entry| entry[0] }.sort
           expect(remaining_keys).to eql(cached_urls - purged_urls)
 

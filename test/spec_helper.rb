@@ -38,7 +38,7 @@ def clear_database
 end
 
 def get_database_entries_for(cache_key)
-  redis.scan_each(match: "#{cache_key.gsub('%', '*')}:*:*:*").map{ |key| key.split(":") }
+  redis.scan_each(match: "#{cache_key}:*:*:*").map{ |key| key.split(":") }
 end
 
 def get_database_entries_for_zone(zone)
