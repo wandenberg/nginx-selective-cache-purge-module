@@ -48,7 +48,6 @@ typedef struct {
     ngx_flag_t                remove_any_entry;
     ngx_flag_t                force;
     ngx_flag_t                purging;
-    void                     *context;
     ngx_queue_t               queue;
     ngx_http_request_t       *request;
     ngx_queue_t              *last;

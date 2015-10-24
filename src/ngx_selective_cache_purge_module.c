@@ -100,7 +100,6 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     cln->handler = (ngx_pool_cleanup_pt) ngx_selective_cache_purge_cleanup_request_context;
     cln->data = r;
 
-    ctx->context = NULL;
     ctx->remove_any_entry = 0;
     ctx->force = 0;
     ctx->purging = 0;
@@ -185,7 +184,8 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
         }
     }
 
-    ngx_selective_cache_purge_barrier_execution(conf, &ctx->context, r, &ngx_selective_cache_purge_send_purge_response);
+    ctx->db_ctx->callback = ngx_selective_cache_purge_send_purge_response;
+    ngx_selective_cache_purge_barrier_execution(conf, ctx->db_ctx);
 }
 
 
@@ -597,7 +597,6 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
 
     if (ctx != NULL) {
         ngx_queue_remove(&ctx->queue);
-        redis_nginx_force_close_context((redisAsyncContext **) &ctx->context);
         if ((ctx->purging_files_event != NULL) && ctx->purging_files_event->timer_set) {
             ngx_del_timer(ctx->purging_files_event);
         }
@@ -761,7 +760,9 @@ ngx_selective_cache_purge_store_new_entries(void *d)
 
         loaded++;
         if ((loaded >= 50) || ngx_queue_empty(&node->files_info_queue)) {
-            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &node->db_ctx->connection, node, &ngx_selective_cache_purge_store_new_entries) != NGX_OK) {
+            node->db_ctx->data = node;
+            node->db_ctx->callback = ngx_selective_cache_purge_store_new_entries;
+            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, node->db_ctx) != NGX_OK) {
                 ngx_selective_cache_purge_store_new_entries(node);
             }
             return;
@@ -805,7 +806,9 @@ ngx_selective_cache_purge_remove_old_entries(void *d)
 
         ngx_queue_remove(q);
         if ((count++ >= 50) || ngx_queue_empty(sync_queue_entries[ngx_process_slot])) {
-            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &sync_db_ctx->connection, data, &ngx_selective_cache_purge_remove_old_entries) != NGX_OK) {
+            sync_db_ctx->data = data;
+            sync_db_ctx->callback = ngx_selective_cache_purge_remove_old_entries;
+            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, sync_db_ctx) != NGX_OK) {
                 ngx_selective_cache_purge_remove_old_entries(data);
             }
             return;
@@ -838,7 +841,9 @@ ngx_selective_cache_purge_renew_entries(void *d)
 
         ngx_queue_remove(q);
         if ((count++ >= 50) || ngx_queue_empty(&data->files_info_to_renew_queue)) {
-            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, &sync_db_ctx->connection, data, &ngx_selective_cache_purge_renew_entries) != NGX_OK) {
+            sync_db_ctx->data = data;
+            sync_db_ctx->callback = ngx_selective_cache_purge_renew_entries;
+            if (ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_module_main_conf, sync_db_ctx) != NGX_OK) {
                 ngx_selective_cache_purge_renew_entries(data);
             }
             return;

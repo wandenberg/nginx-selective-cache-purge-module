@@ -68,24 +68,28 @@ ngx_selective_cache_purge_finish_db(ngx_cycle_t *cycle)
 void
 stub_callback(redisAsyncContext *c, void *rep, void *privdata)
 {
-    void *data = c->data;
-    void (*callback) (void *) = privdata;
-    if (callback != NULL) {
-        callback(data);
+    ngx_selective_cache_purge_db_ctx_t *db_ctx = privdata;
+
+    if (db_ctx->callback != NULL) {
+        if (db_ctx->data == NULL) {
+            ngx_selective_cache_purge_destroy_db_context(&db_ctx);
+            return;
+        }
+
+        db_ctx->callback(db_ctx->data);
     }
 }
 
 
 ngx_int_t
-ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_t *conf, void **context, void *data, void (*callback) (void *))
+ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_t *conf, ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return NGX_ERROR;
     }
 
-    c->data = data;
-    redisAsyncCommand(c, stub_callback, callback, PING_DATABASE_COMMAND);
+    redisAsyncCommand(c, stub_callback, db_ctx, PING_DATABASE_COMMAND);
 
     return NGX_OK;
 }
