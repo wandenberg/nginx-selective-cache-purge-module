@@ -106,7 +106,6 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
     ctx->purging = 0;
     ctx->request = r;
     ctx->purging_files_event->data = r;
-    ctx->redis_ctx = NULL;
     ngx_queue_init(&ctx->entries);
     ngx_queue_insert_tail(purge_requests_queue, &ctx->queue);
 
@@ -128,8 +127,9 @@ ngx_selective_cache_purge_handler(ngx_http_request_t *r)
         ngx_selective_cache_purge_force_remove(r);
     } else {
         ctx->purge_query = vv_purge_query;
+        ctx->db_ctx->callback = (void *) ngx_selective_cache_purge_entries_handler;
         if (ngx_trylock(&purging[ngx_process_slot])) {
-            ngx_selective_cache_purge_select_by_cache_key(r, &ngx_selective_cache_purge_entries_handler);
+            ngx_selective_cache_purge_select_by_cache_key(ctx->db_ctx);
         }
     }
 
@@ -146,6 +146,8 @@ ngx_selective_cache_purge_entries_handler(ngx_http_request_t *r)
     ngx_queue_t                             *cur;
     ngx_int_t                                rc;
     ngx_int_t                                processed = 0;
+
+    ctx->db_ctx->callback = NULL;
 
 #  if (NGX_HAVE_FILE_AIO)
     if (r->aio) {
@@ -597,15 +599,11 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
         }
         ctx->purging_files_event = NULL;
 
-        if (ctx->redis_ctx != NULL) {
-            ctx->redis_ctx->request_ctx = NULL;
-            ctx->redis_ctx->callback = NULL;
-        }
-        ctx->redis_ctx = NULL;
-
         if (ctx->db_ctx != NULL) {
             ctx->db_ctx->data = NULL;
-            ngx_selective_cache_purge_destroy_db_context(&ctx->db_ctx);
+            if (ctx->db_ctx->callback == NULL) {
+                ngx_selective_cache_purge_destroy_db_context(&ctx->db_ctx);
+            }
         }
 
         if (ctx->purging && !ctx->force) {
@@ -614,7 +612,7 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
                 ngx_selective_cache_purge_request_ctx_t *cur = ngx_queue_data(q, ngx_selective_cache_purge_request_ctx_t, queue);
                 if (!cur->force) {
                     empty = 0;
-                    ngx_selective_cache_purge_select_by_cache_key(cur->request, &ngx_selective_cache_purge_entries_handler);
+                    ngx_selective_cache_purge_select_by_cache_key(cur->db_ctx);
                     break;
                 }
             }

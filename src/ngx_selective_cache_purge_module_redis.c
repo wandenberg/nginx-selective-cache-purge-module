@@ -2,10 +2,10 @@
 #include <ngx_selective_cache_purge_module_utils.h>
 
 redisAsyncContext *open_context(ngx_selective_cache_purge_main_conf_t *conf, redisAsyncContext **context);
-void scan_callback(redisAsyncContext *c, void *r, void *privdata);
-void scan_by_cache_key_callback(redisAsyncContext *c, void *r, void *privdata);
+void scan_callback(redisAsyncContext *c, void *rep, void *privdata);
+void scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata);
 ngx_int_t parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
-void select_by_cache_key(ngx_http_request_t *r, char *cursor, void (*callback) (ngx_http_request_t *r));
+void select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor);
 
 
 #define SCAN_DATABASE_COMMAND "SCAN %s COUNT 100"
@@ -131,36 +131,26 @@ ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_main_conf_t
 
 
 void
-ngx_selective_cache_purge_select_by_cache_key(ngx_http_request_t *r, void (*callback) (ngx_http_request_t *r))
+ngx_selective_cache_purge_select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    select_by_cache_key(r, "0", callback);
+    select_by_cache_key(db_ctx, "0");
 }
 
 void
-select_by_cache_key(ngx_http_request_t *r, char *cursor, void (*callback) (ngx_http_request_t *r))
+select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor)
 {
-    ngx_selective_cache_purge_redis_ctx_t    *redis_ctx;
+    ngx_http_request_t                       *r = db_ctx->data;
     ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     ngx_selective_cache_purge_main_conf_t    *conf =  ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
 
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &ctx->context);
+    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return;
     }
 
-    if ((redis_ctx = ngx_alloc(sizeof(ngx_selective_cache_purge_redis_ctx_t), ngx_cycle->log)) == NULL) {
-        return;
-    }
-
-    redis_ctx->callback = callback;
-    redis_ctx->request_ctx = ctx;
-    ctx->redis_ctx = redis_ctx;
-
     ctx->purging = 1;
 
-    c->data = r;
-
-    redisAsyncCommand(c, scan_by_cache_key_callback, redis_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, ctx->purge_query.data, ctx->purge_query.len);
+    redisAsyncCommand(c, scan_by_cache_key_callback, db_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, ctx->purge_query.data, ctx->purge_query.len);
 }
 
 
@@ -210,22 +200,21 @@ scan_callback(redisAsyncContext *c, void *rep, void *privdata)
 void
 scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
 {
-    ngx_selective_cache_purge_redis_ctx_t *redis_ctx = privdata;
-    ngx_selective_cache_purge_request_ctx_t *ctx = redis_ctx->request_ctx;
-    void (*callback) (ngx_http_request_t *r) = redis_ctx->callback;
-    ngx_uint_t i;
+    ngx_selective_cache_purge_db_ctx_t      *db_ctx = privdata;
+    ngx_selective_cache_purge_request_ctx_t *ctx;
+    ngx_http_request_t                      *r;
+    ngx_uint_t                               i;
 
-    ngx_free(redis_ctx);
-
-    if (ctx == NULL) {
+    if (db_ctx->data == NULL) {
+        ngx_selective_cache_purge_destroy_db_context(&db_ctx);
         return;
     }
-    ctx->redis_ctx = NULL;
 
-    ngx_http_request_t *r = ctx->request;
+    r = db_ctx->data;
+    ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
     redisReply *reply = rep;
     if (reply == NULL) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_callback");
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_by_cache_key_callback");
         ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
         return;
     }
@@ -240,9 +229,9 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
     }
 
     if (strncmp(reply->element[0]->str, "0", 1) == 0) {
-        callback(r);
+        db_ctx->callback(db_ctx->data);
     } else {
-        select_by_cache_key(r, reply->element[0]->str, callback);
+        select_by_cache_key(db_ctx, reply->element[0]->str);
     }
 }
 
