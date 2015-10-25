@@ -147,17 +147,14 @@ ngx_selective_cache_purge_select_by_cache_key(ngx_selective_cache_purge_db_ctx_t
 void
 select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor)
 {
-    ngx_http_request_t                       *r = db_ctx->data;
-    ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
-
     redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return;
     }
 
-    ctx->purging = 1;
+    db_ctx->purging = 1;
 
-    redisAsyncCommand(c, scan_by_cache_key_callback, db_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, ctx->purge_query.data, ctx->purge_query.len);
+    redisAsyncCommand(c, scan_by_cache_key_callback, db_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, db_ctx->purge_query.data, db_ctx->purge_query.len);
 }
 
 
@@ -210,30 +207,24 @@ void
 scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
 {
     ngx_selective_cache_purge_db_ctx_t      *db_ctx = privdata;
-    ngx_selective_cache_purge_request_ctx_t *ctx;
-    ngx_http_request_t                      *r;
     ngx_uint_t                               i;
+    redisReply                              *reply = rep;
 
     if (db_ctx->data == NULL) {
         ngx_selective_cache_purge_destroy_db_context(&db_ctx);
         return;
     }
 
-    r = db_ctx->data;
-    ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
-    redisReply *reply = rep;
     if (reply == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_by_cache_key_callback");
-        ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
+        db_ctx->err_callback(db_ctx->data);
         return;
     }
 
-    if (reply->element[1]->elements > 0) {
-        for (i = 0; i < reply->element[1]->elements; i++) {
-            if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, &ctx->entries, r->pool) != NGX_OK) {
-                ngx_selective_cache_purge_send_response(r, NULL, 0, NGX_HTTP_INTERNAL_SERVER_ERROR, &CONTENT_TYPE);
-                return;
-            }
+    for (i = 0; i < reply->element[1]->elements; i++) {
+        if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
+            db_ctx->err_callback(db_ctx->data);
+            return;
         }
     }
 
@@ -289,8 +280,16 @@ ngx_selective_cache_purge_init_db_context(void)
 
     if ((db_ctx = ngx_calloc(sizeof(ngx_selective_cache_purge_db_ctx_t), ngx_cycle->log)) != NULL) {
         db_ctx->callback = NULL;
+        db_ctx->err_callback = NULL;
         db_ctx->data = NULL;
         db_ctx->connection = NULL;
+        db_ctx->purging = 0;
+        ngx_queue_init(&db_ctx->entries);
+
+        if ((db_ctx->pool = ngx_create_pool(4096, ngx_cycle->log)) == NULL) {
+            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: could not allocate memory to db context pool");
+            return NULL;
+        }
     }
 
     return db_ctx;
@@ -302,6 +301,9 @@ ngx_selective_cache_purge_destroy_db_context(ngx_selective_cache_purge_db_ctx_t 
 {
     if (db_ctx && *db_ctx) {
         redis_nginx_force_close_context((redisAsyncContext **) &(*db_ctx)->connection);
+        if ((*db_ctx)->pool) {
+            ngx_destroy_pool((*db_ctx)->pool);
+        }
         ngx_free(*db_ctx);
         *db_ctx = NULL;
     }
