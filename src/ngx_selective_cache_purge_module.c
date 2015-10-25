@@ -421,15 +421,11 @@ ngx_selective_cache_purge_sync_memory_to_database(void)
             return NGX_ERROR;
         }
 
-        if ((sync_queue_entries[ngx_process_slot] = ngx_pcalloc(sync_temp_pool[ngx_process_slot], sizeof(ngx_queue_t))) == NULL) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory for temporary pool");
-            return NGX_ERROR;
-        }
-        ngx_queue_init(sync_queue_entries[ngx_process_slot]);
-
         ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, data, ngx_selective_cache_purge_zone_init);
 
-        ngx_selective_cache_purge_read_all_entires(data, ngx_selective_cache_purge_organize_entries);
+        sync_db_ctx->data = data;
+        sync_db_ctx->callback = (void *) ngx_selective_cache_purge_organize_entries;
+        ngx_selective_cache_purge_read_all_entires(sync_db_ctx);
         return NGX_OK;
     }
     return NGX_DECLINED;
@@ -645,7 +641,7 @@ ngx_selective_cache_purge_organize_entries(ngx_selective_cache_purge_shm_data_t 
     ngx_md5_t                         md5;
     u_char                            key[NGX_HTTP_CACHE_KEY_LEN];
 
-    for (q = ngx_queue_last(sync_queue_entries[ngx_process_slot]); q != ngx_queue_sentinel(sync_queue_entries[ngx_process_slot]); q = ngx_queue_prev(q)) {
+    for (q = ngx_queue_last(&sync_db_ctx->entries); q != ngx_queue_sentinel(&sync_db_ctx->entries); q = ngx_queue_prev(q)) {
         ngx_selective_cache_purge_cache_item_t *ci = ngx_queue_data(q, ngx_selective_cache_purge_cache_item_t, queue);
 
         if ((node = ngx_selective_cache_purge_find_zone(ci->zone, ci->type)) != NULL) {
@@ -792,7 +788,7 @@ ngx_selective_cache_purge_remove_old_entries(void *d)
     ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0, "ngx_selective_cache_purge: removing old entries");
 
     // remove keys from database not found on disk
-    while (!ngx_queue_empty(sync_queue_entries[ngx_process_slot]) && (q = ngx_queue_last(sync_queue_entries[ngx_process_slot]))) {
+    while (!ngx_queue_empty(&sync_db_ctx->entries) && (q = ngx_queue_last(&sync_db_ctx->entries))) {
         ngx_selective_cache_purge_cache_item_t *ci = ngx_queue_data(q, ngx_selective_cache_purge_cache_item_t, queue);
         ci->removed = 0;
 
@@ -801,7 +797,7 @@ ngx_selective_cache_purge_remove_old_entries(void *d)
         }
 
         ngx_queue_remove(q);
-        if ((count++ >= 50) || ngx_queue_empty(sync_queue_entries[ngx_process_slot])) {
+        if ((count++ >= 50) || ngx_queue_empty(&sync_db_ctx->entries)) {
             sync_db_ctx->data = data;
             sync_db_ctx->callback = ngx_selective_cache_purge_remove_old_entries;
             if (ngx_selective_cache_purge_barrier_execution(sync_db_ctx) != NGX_OK) {
@@ -811,7 +807,7 @@ ngx_selective_cache_purge_remove_old_entries(void *d)
         }
     }
 
-    if (ngx_queue_empty(sync_queue_entries[ngx_process_slot])) {
+    if (ngx_queue_empty(&sync_db_ctx->entries)) {
         ngx_selective_cache_purge_renew_entries(data);
     }
 }

@@ -44,11 +44,6 @@ ngx_selective_cache_purge_init_db(ngx_cycle_t *cycle)
         return NGX_ERROR;
     }
 
-    if ((sync_db_ctx = ngx_calloc(sizeof(ngx_selective_cache_purge_db_ctx_t), cycle->log)) == NULL) {
-        ngx_log_error(NGX_LOG_ERR, cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory to sync_db_ctx");
-        return NGX_ERROR;
-    }
-
     redis_nginx_init();
 
     return NGX_OK;
@@ -58,7 +53,6 @@ ngx_selective_cache_purge_init_db(ngx_cycle_t *cycle)
 ngx_int_t
 ngx_selective_cache_purge_finish_db(ngx_cycle_t *cycle)
 {
-    ngx_selective_cache_purge_destroy_db_context(&sync_db_ctx);
     ngx_selective_cache_purge_destroy_db_context(&db_ctxs[ngx_process_slot]);
 
     return NGX_OK;
@@ -124,28 +118,20 @@ ngx_selective_cache_purge_remove(ngx_str_t *zone, ngx_str_t *type, ngx_str_t *ca
 
 
 void
-ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_shm_data_t *data, void (*callback) (ngx_selective_cache_purge_shm_data_t *))
+ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    redisAsyncContext *c = open_context((redisAsyncContext **) &sync_db_ctx->connection);
+    redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
-        callback(data);
+        db_ctx->callback(db_ctx->data);
         return;
     }
 
-    c->data = data;
-
-    redisAsyncCommand(c, scan_callback, callback, SCAN_DATABASE_COMMAND, "0");
+    redisAsyncCommand(c, scan_callback, db_ctx, SCAN_DATABASE_COMMAND, "0");
 }
 
 
 void
 ngx_selective_cache_purge_select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx)
-{
-    select_by_cache_key(db_ctx, "0");
-}
-
-void
-select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor)
 {
     redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
@@ -154,7 +140,7 @@ select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor)
 
     db_ctx->purging = 1;
 
-    redisAsyncCommand(c, scan_by_cache_key_callback, db_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, cursor, db_ctx->purge_query.data, db_ctx->purge_query.len);
+    redisAsyncCommand(c, scan_by_cache_key_callback, db_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, "0", db_ctx->purge_query.data, db_ctx->purge_query.len);
 }
 
 
@@ -174,30 +160,29 @@ open_context(redisAsyncContext **context)
 void
 scan_callback(redisAsyncContext *c, void *rep, void *privdata)
 {
-    ngx_selective_cache_purge_shm_data_t *data = c->data;
-    void (*callback) (ngx_selective_cache_purge_shm_data_t *) = privdata;
-    ngx_uint_t i;
+    ngx_selective_cache_purge_db_ctx_t *db_ctx = privdata;
+    ngx_uint_t                          i;
 
     redisReply *reply = rep;
     if (reply == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_callback");
-        callback(data);
+        db_ctx->err_callback(db_ctx->data);
         return;
     }
 
     if (reply->element[1]->elements > 0) {
         for (i = 0; i < reply->element[1]->elements; i++) {
-            if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, sync_queue_entries[ngx_process_slot], sync_temp_pool[ngx_process_slot]) != NGX_OK) {
-                callback(data);
+            if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
+                db_ctx->err_callback(db_ctx->data);
                 return;
             }
         }
     }
 
     if (strncmp(reply->element[0]->str, "0", 1) == 0) {
-        callback(data);
+        db_ctx->callback(db_ctx->data);
     } else {
-        redisAsyncCommand(c, scan_callback, callback, SCAN_DATABASE_COMMAND, reply->element[0]->str);
+        redisAsyncCommand(c, scan_callback, db_ctx, SCAN_DATABASE_COMMAND, reply->element[0]->str);
     }
 
 }
@@ -231,7 +216,7 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
     if (strncmp(reply->element[0]->str, "0", 1) == 0) {
         db_ctx->callback(db_ctx->data);
     } else {
-        select_by_cache_key(db_ctx, reply->element[0]->str);
+        redisAsyncCommand(c, scan_by_cache_key_callback, db_ctx, SCAN_BY_CACHE_KEY_DATABASE_COMMAND, reply->element[0]->str, db_ctx->purge_query.data, db_ctx->purge_query.len);
     }
 }
 

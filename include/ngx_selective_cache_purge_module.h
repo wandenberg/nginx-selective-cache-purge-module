@@ -91,7 +91,6 @@ static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cach
 ngx_selective_cache_purge_db_ctx_t *db_ctxs[NGX_MAX_PROCESSES];
 ngx_selective_cache_purge_db_ctx_t *sync_db_ctx;
 ngx_pool_t *sync_temp_pool[NGX_MAX_PROCESSES];
-ngx_queue_t *sync_queue_entries[NGX_MAX_PROCESSES];
 ngx_atomic_t purging[NGX_MAX_PROCESSES];
 ngx_queue_t *purge_requests_queue;
 
