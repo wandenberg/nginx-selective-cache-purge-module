@@ -77,8 +77,6 @@ typedef struct {
     ngx_queue_t               files_info_to_renew_queue;
 } ngx_selective_cache_purge_shm_data_t;
 
-static ngx_selective_cache_purge_main_conf_t *ngx_selective_cache_purge_module_main_conf;
-
 ngx_int_t ngx_selective_cache_purge_indexer_handler(ngx_http_request_t *r);
 ngx_int_t ngx_selective_cache_purge_handler(ngx_http_request_t *r);
 

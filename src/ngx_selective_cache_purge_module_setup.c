@@ -99,8 +99,6 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     conf->redis_port = NGX_CONF_UNSET_UINT;
     conf->redis_database = NGX_CONF_UNSET_UINT;
 
-    ngx_selective_cache_purge_module_main_conf = conf;
-
     return conf;
 }
 
@@ -138,7 +136,9 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
 static ngx_int_t
 ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
 {
-    if ((ngx_selective_cache_purge_module_main_conf == NULL) || !ngx_selective_cache_purge_module_main_conf->enabled) {
+    ngx_selective_cache_purge_main_conf_t *conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_selective_cache_purge_module);
+
+    if (!conf->enabled) {
         return NGX_OK;
     }
 
@@ -167,7 +167,9 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
 static void
 ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle)
 {
-    if ((ngx_selective_cache_purge_module_main_conf == NULL) || !ngx_selective_cache_purge_module_main_conf->enabled) {
+    ngx_selective_cache_purge_main_conf_t *conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_selective_cache_purge_module);
+
+    if (!conf->enabled) {
         return;
     }
 
@@ -206,14 +208,15 @@ ngx_selective_cache_purge_create_loc_conf(ngx_conf_t *cf)
 static char *
 ngx_selective_cache_purge_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 {
-    ngx_selective_cache_purge_loc_conf_t *prev = parent;
-    ngx_selective_cache_purge_loc_conf_t *conf = child;
+    ngx_selective_cache_purge_main_conf_t *mcf = ngx_http_conf_get_module_main_conf(cf, ngx_selective_cache_purge_module);
+    ngx_selective_cache_purge_loc_conf_t  *prev = parent;
+    ngx_selective_cache_purge_loc_conf_t  *conf = child;
 
     if (conf->purge_query == NULL) {
         conf->purge_query = prev->purge_query;
     }
 
-    if (!ngx_selective_cache_purge_module_main_conf->enabled && (conf->purge_query != NULL)) {
+    if (!mcf->enabled && (conf->purge_query != NULL)) {
         ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "ngx_selective_cache_purge: could not use this module without set a database or compile Nginx with cache support");
         return NGX_CONF_ERROR;
     }

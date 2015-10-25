@@ -1,7 +1,7 @@
 #include <ngx_selective_cache_purge_module_db.h>
 #include <ngx_selective_cache_purge_module_utils.h>
 
-redisAsyncContext *open_context(ngx_selective_cache_purge_main_conf_t *conf, redisAsyncContext **context);
+redisAsyncContext *open_context(redisAsyncContext **context);
 void scan_callback(redisAsyncContext *c, void *rep, void *privdata);
 void scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata);
 ngx_int_t parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
@@ -82,9 +82,9 @@ stub_callback(redisAsyncContext *c, void *rep, void *privdata)
 
 
 ngx_int_t
-ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_t *conf, ngx_selective_cache_purge_db_ctx_t *db_ctx)
+ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
+    redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -96,9 +96,9 @@ ngx_selective_cache_purge_barrier_execution(ngx_selective_cache_purge_main_conf_
 
 
 ngx_int_t
-ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires, ngx_selective_cache_purge_db_ctx_t *db_ctx)
+ngx_selective_cache_purge_store(ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, time_t expires, ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
+    redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -110,9 +110,9 @@ ngx_selective_cache_purge_store(ngx_selective_cache_purge_main_conf_t *conf, ngx
 
 
 ngx_int_t
-ngx_selective_cache_purge_remove(ngx_selective_cache_purge_main_conf_t *conf, ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, ngx_selective_cache_purge_db_ctx_t *db_ctx)
+ngx_selective_cache_purge_remove(ngx_str_t *zone, ngx_str_t *type, ngx_str_t *cache_key, ngx_str_t *filename, ngx_selective_cache_purge_db_ctx_t *db_ctx)
 {
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
+    redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return NGX_ERROR;
     }
@@ -124,9 +124,9 @@ ngx_selective_cache_purge_remove(ngx_selective_cache_purge_main_conf_t *conf, ng
 
 
 void
-ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_main_conf_t *conf, ngx_selective_cache_purge_shm_data_t *data, void (*callback) (ngx_selective_cache_purge_shm_data_t *))
+ngx_selective_cache_purge_read_all_entires(ngx_selective_cache_purge_shm_data_t *data, void (*callback) (ngx_selective_cache_purge_shm_data_t *))
 {
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &sync_db_ctx->connection);
+    redisAsyncContext *c = open_context((redisAsyncContext **) &sync_db_ctx->connection);
     if (c == NULL) {
         callback(data);
         return;
@@ -149,9 +149,8 @@ select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor)
 {
     ngx_http_request_t                       *r = db_ctx->data;
     ngx_selective_cache_purge_request_ctx_t  *ctx = ngx_http_get_module_ctx(r, ngx_selective_cache_purge_module);
-    ngx_selective_cache_purge_main_conf_t    *conf =  ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
 
-    redisAsyncContext *c = open_context(conf, (redisAsyncContext **) &db_ctx->connection);
+    redisAsyncContext *c = open_context((redisAsyncContext **) &db_ctx->connection);
     if (c == NULL) {
         return;
     }
@@ -163,8 +162,10 @@ select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor)
 
 
 redisAsyncContext *
-open_context(ngx_selective_cache_purge_main_conf_t *conf, redisAsyncContext **context)
+open_context(redisAsyncContext **context)
 {
+    ngx_selective_cache_purge_main_conf_t *conf = ngx_http_cycle_get_module_main_conf(ngx_cycle, ngx_selective_cache_purge_module);
+
     if (conf->redis_host.data != NULL) {
         return redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, context);
     } else {
