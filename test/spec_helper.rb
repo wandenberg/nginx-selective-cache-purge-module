@@ -98,6 +98,7 @@ end
 
 RSpec.configure do |config|
   config.before(:suite) do
+    FileUtils.mkdir_p NginxTestHelper.nginx_tests_tmp_dir
     system("redis-server --port #{redis_port} --unixsocket #{redis_unix_socket} --unixsocketperm 777 --daemonize yes --pidfile #{redis_unix_socket.gsub("socket", "pid")}")
   end
 
