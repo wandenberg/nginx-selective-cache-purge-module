@@ -14,7 +14,8 @@ module NginxConfiguration
       redis_database: redis_database,
       purge_query: "$1*",
       max_size: "100m",
-      keys_zone: "10m"
+      keys_zone: "10m",
+      inactive: "10d"
     }
   end
 

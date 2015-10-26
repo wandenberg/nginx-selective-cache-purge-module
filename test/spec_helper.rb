@@ -37,6 +37,12 @@ def clear_database
   redis.flushdb
 end
 
+def ttl_database_entries_for(cache_key)
+  get_database_entries_for(cache_key).map do |entry|
+    redis.ttl(entry.join(":"))
+  end
+end
+
 def get_database_entries_for(cache_key)
   redis.scan_each(match: "#{cache_key}:*:*:*").map{ |key| key.split(":") }
 end

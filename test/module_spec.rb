@@ -91,6 +91,55 @@ describe "Selective Cache Purge Module" do
       end
       expect(get_database_entries_for(path)).not_to be_empty
     end
+
+    it "should use the cache time or the inactive time as expires which is bigger" do
+      nginx_run_server(config) do
+        expect(response_for("http://#{nginx_host}:#{nginx_port}/index.html").code).to eq '200'
+        expect(response_for("http://#{nginx_host}:#{nginx_port}/big-cache").code).to eq '200'
+        expect(response_for("http://#{nginx_host}:#{nginx_port}/small-cache").code).to eq '200'
+      end
+      expect(ttl_database_entries_for("/index.html").first).to  be_within(5).of(10 * 24 * 60 * 60)
+      expect(ttl_database_entries_for("/big-cache").first).to   be_within(5).of(30 * 24 * 60 * 60)
+      expect(ttl_database_entries_for("/small-cache").first).to be_within(5).of(10 * 24 * 60 * 60)
+    end
+
+    it "should update the entry each time the cache is not HIT, including STALE" do
+      path = "/conditional/index.html"
+      nginx_run_server(config.merge(inactive: "20s"), timeout: 60) do |conf|
+        expect((resp = response_for("http://#{nginx_host}:#{nginx_port}#{path}")).code).to eq '200'
+        expect(resp['x-cache-status']).to include("MISS")
+        sleep 1
+        expect(ttl_database_entries_for(path).first).to be_within(2).of(20)
+
+        sleep 4
+
+        expect((resp = response_for("http://#{nginx_host}:#{nginx_port}#{path}")).code).to eq '200'
+        expect(resp['x-cache-status']).to include("HIT")
+        sleep 1
+        expect(ttl_database_entries_for(path).first).to be_within(2).of(15)
+
+        sleep 7
+
+        expect((resp = response_for("http://#{nginx_host}:#{nginx_port}#{path}?error=1")).code).to eq '200'
+        expect(resp['x-cache-status']).to include("STALE")
+        sleep 1
+        expect(ttl_database_entries_for(path).first).to be_within(2).of(20)
+
+        sleep 1
+
+        expect((resp = response_for("http://#{nginx_host}:#{nginx_port}#{path}")).code).to eq '200'
+        expect(resp['x-cache-status']).to include("EXPIRED")
+        sleep 1
+        expect(ttl_database_entries_for(path).first).to be_within(2).of(20)
+
+        sleep 9
+
+        expect((resp = response_for("http://#{nginx_host}:#{nginx_port}#{path}")).code).to eq '200'
+        expect(resp['x-cache-status']).to include("HIT")
+        sleep 1
+        expect(ttl_database_entries_for(path).first).to be_within(2).of(10)
+      end
+    end
   end
 
   context "when purging" do

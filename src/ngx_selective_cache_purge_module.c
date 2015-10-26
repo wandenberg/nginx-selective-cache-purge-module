@@ -264,7 +264,9 @@ ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r)
     u_char            *p = NULL;
     ngx_str_t         *key = NULL;
 
-    if (r->upstream && r->upstream->cacheable && r->cache && (r->cache->node != NULL) && (r->cache->file.name.len > 0) && (!r->cache->exists || r->cache->updated)) {
+    if (r->upstream && (r->upstream->cache_status >= NGX_HTTP_CACHE_MISS) && (r->upstream->cache_status < NGX_HTTP_CACHE_HIT) &&
+            r->cache && (r->cache->node != NULL) && (r->cache->file.name.len > 0)) {
+
         key = r->cache->keys.elts;
         for (i = 0; i < r->cache->keys.nelts; i++) {
             len += key[i].len;
@@ -292,7 +294,7 @@ ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t 
 {
 #if NGX_HTTP_CACHE
     ngx_str_t *zone = &r->cache->file_cache->shm_zone->shm.name;
-    time_t     expires = r->cache->node->expire;
+    time_t     expires = ngx_max(r->cache->node->expire, r->cache->valid_sec);
     ngx_str_t *type = ngx_selective_cache_purge_get_module_type_by_tag(r->cache->file_cache->shm_zone->tag);
     ngx_str_t *filename = ngx_selective_cache_purge_alloc_str(r->pool, r->cache->file.name.len - r->cache->file_cache->path->name.len);
     if ((type != NULL) && (filename != NULL)) {
