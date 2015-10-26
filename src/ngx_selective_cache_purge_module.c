@@ -691,7 +691,6 @@ ngx_selective_cache_purge_store_new_entries(void *d)
     while (!ngx_queue_empty(&node->files_info_queue) && (q = ngx_queue_last(&node->files_info_queue))) {
         ngx_selective_cache_purge_cache_item_t *ci = ngx_queue_data(q, ngx_selective_cache_purge_cache_item_t, queue);
 
-        has_elements = 1;
 
         p = filename_data + len - (2 * NGX_HTTP_CACHE_KEY_LEN);
         p = ngx_copy(p, ci->key_dumped, (2 * NGX_HTTP_CACHE_KEY_LEN));
@@ -718,7 +717,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
             if (err != NGX_ENOENT) {
                 ngx_log_error(NGX_LOG_CRIT, ngx_cycle->log, err, "ngx_selective_cache_purge: "ngx_open_file_n " \"%V\" failed", &file.name);
             }
-            break;
+            continue;
         }
 
         if (ngx_read_file(&file, (u_char *) &h, sizeof(ngx_http_file_cache_header_t), 0) == NGX_ERROR) {
@@ -726,6 +725,16 @@ ngx_selective_cache_purge_store_new_entries(void *d)
             ngx_close_file(file.fd);
             break;
         }
+
+#ifdef NGX_HTTP_CACHE_VERSION
+        if (h.version != NGX_HTTP_CACHE_VERSION) {
+            node->count--;
+            ngx_queue_remove(q);
+            ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "ngx_selective_cache_purge: cache file \"%V\" version mismatch", &file.name);
+            ngx_close_file(file.fd);
+            continue;
+        }
+#endif
 
         if ((ci->cache_key = ngx_selective_cache_purge_alloc_str(sync_temp_pool[ngx_process_slot], h.header_start - sizeof(ngx_http_file_cache_header_t) - NGX_HTTP_FILE_CACHE_KEY_LEN - 1)) == NULL) {
             ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory for file info");
@@ -749,6 +758,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
             break;
         }
 
+        has_elements = 1;
         node->count--;
         ngx_queue_remove(q);
 
