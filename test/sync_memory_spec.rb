@@ -11,7 +11,15 @@ describe "Selective Cache Purge Module Sync Memory" do
     FileUtils.rm_rf Dir["#{proxy_cache_path}_2/**"]
     FileUtils.mkdir_p "#{proxy_cache_path}_2"
 
-    Zip::File.open(File.expand_path('./assets/cache.zip', File.dirname(__FILE__))) do |zipfile|
+    nginx_version = `#{NginxTestHelper.nginx_executable} -V 2>&1`.match(/nginx version\: nginx\/([\d\.]+)/)[1]
+    zip_name = "cache.zip"
+    if nginx_version.match(/1\.7\.[34567]/)
+      zip_name = "cache_2.zip"
+    elsif nginx_version.to_f >= 1.7
+      zip_name = "cache_3.zip"
+    end
+
+    Zip::File.open(File.expand_path("./assets/#{zip_name}", File.dirname(__FILE__))) do |zipfile|
       zipfile.restore_permissions = true
       zipfile.each do |file|
         FileUtils.mkdir_p File.dirname("#{proxy_cache_path}/#{file}")
