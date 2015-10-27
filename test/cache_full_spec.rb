@@ -20,9 +20,10 @@ describe "Selective Cache Purge Module Cache Full" do
     number_of_requests.times do |i|
       response_for("http://#{nginx_host}:#{nginx_port}/to/set/cache/full#{start + i}.html")
     end
+    expect(cached_files.count).to be > expected_cached_files # max_size / page_size
+    sleep(0.5) if NginxTestHelper.nginx_executable.include?("valgrind")
     final = get_database_entries_for("*").count
     expect(final).to eql(initial + number_of_requests)
-    expect(cached_files.count).to be > expected_cached_files # max_size / page_size
     count = 0
     while (total = cached_files.count) > expected_cached_files # max_size / page_size
       sleep 1
@@ -114,7 +115,7 @@ describe "Selective Cache Purge Module Cache Full" do
 
           entries = get_database_entries_for("*")
           entries.each do |cache_key, zone, type, filename|
-            response_for("http://#{nginx_host}:#{nginx_port}/purge/cache_key")
+            response_for("http://#{nginx_host}:#{nginx_port}/purge/#{cache_key}")
           end
 
           expect{ rotate_cache(1001) }.to_not raise_error
@@ -277,7 +278,7 @@ describe "Selective Cache Purge Module Cache Full" do
             expect(initial_size).to eq 1023
 
             EventMachine.run do
-              req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", inactivity_timeout: 1).get
+              req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", inactivity_timeout: 2).get
               req.callback do
                 fail("The request was not canceled")
                 EventMachine.stop

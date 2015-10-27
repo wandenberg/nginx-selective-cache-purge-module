@@ -31,18 +31,21 @@ describe "Selective Cache Purge Module" do
     it "should save an entry for status codes other than 200" do
       path = "/not-found/index.html"
       nginx_run_server(config, timeout: 60) do |conf|
-        expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '404'
-        expect(File.read(conf.access_log)).to include("[MISS]")
+        expect(log_changes_for(conf.access_log) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '404'
+        end).to include("[MISS]")
 
         sleep 15
 
-        expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '404'
-        expect(File.read(conf.access_log)).to include("[HIT]")
+        expect(log_changes_for(conf.access_log) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '404'
+        end).to include("[HIT]")
 
         sleep 20
 
-        expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '404'
-        expect(File.read(conf.access_log)).to include("[EXPIRED]")
+        expect(log_changes_for(conf.access_log) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '404'
+        end).to include("[EXPIRED]")
       end
       expect(get_database_entries_for(path)).not_to be_empty
     end
@@ -50,18 +53,21 @@ describe "Selective Cache Purge Module" do
     it "should save an entry when backend is unavailable" do
       path = "/unavailable"
       nginx_run_server(config, timeout: 60) do |conf|
-        expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '502'
-        expect(File.read(conf.access_log)).to include("[MISS]")
+        expect(log_changes_for(conf.access_log) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '502'
+        end).to include("[MISS]")
 
         sleep 15
 
-        expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '502'
-        expect(File.read(conf.access_log)).to include("[HIT]")
+        expect(log_changes_for(conf.access_log) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '502'
+        end).to include("[HIT]")
 
         sleep 20
 
-        expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '502'
-        expect(File.read(conf.access_log)).to include("[MISS]")
+        expect(log_changes_for(conf.access_log) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '502'
+        end).to include("[MISS]")
       end
       expect(get_database_entries_for(path)).not_to be_empty
     end
@@ -172,6 +178,7 @@ describe "Selective Cache Purge Module" do
         cached_urls.each do |url|
           response_for(File.join("http://#{nginx_host}:#{nginx_port}", url))
         end
+        sleep(0.5) if NginxTestHelper.nginx_executable.include?("valgrind")
       end
 
       it "should remove only matched entries" do
@@ -241,21 +248,18 @@ describe "Selective Cache Purge Module" do
         end
 
         nginx_run_server(config) do |conf|
-          error_log_pre = File.readlines(conf.error_log)
+          expect(log_changes_for(conf.error_log) do
+            purged_urls = [
+              "/resources/r1.jpg",
+              "/resources/r2.jpg",
+              "/resources/r3.jpg"
+            ]
 
-          purged_urls = [
-            "/resources/r1.jpg",
-            "/resources/r2.jpg",
-            "/resources/r3.jpg"
-          ]
+            response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
+            expect(response.body).to have_purged_urls(purged_urls)
+            expect(response.body).to have_not_purged_urls(cached_urls - purged_urls)
 
-          response = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources/")
-
-          error_log_pos = File.readlines(conf.error_log)
-          expect((error_log_pos - error_log_pre).join).not_to include("md5 collision")
-
-          expect(response.body).to have_purged_urls(purged_urls)
-          expect(response.body).to have_not_purged_urls(cached_urls - purged_urls)
+          end).not_to include("md5 collision")
         end
       end
 

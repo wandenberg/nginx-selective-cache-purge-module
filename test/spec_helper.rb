@@ -60,6 +60,14 @@ def response_for(url)
   Net::HTTP.get_response(uri)
 end
 
+def log_changes_for(log_file, &block)
+  log_pre = File.readlines(log_file)
+  block.call
+  sleep(0.5) if NginxTestHelper.nginx_executable.include?("valgrind")
+  log_pos = File.readlines(log_file)
+  (log_pos - log_pre).join
+end
+
 RSpec::Matchers.define :have_purged_urls do |urls|
   match do |actual|
     text = actual.is_a?(Array) ? actual.map{|v| "\n#{v} ->"}.join : actual
