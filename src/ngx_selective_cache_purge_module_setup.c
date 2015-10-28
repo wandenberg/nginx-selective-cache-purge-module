@@ -146,7 +146,6 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
         return NGX_OK;
     }
 
-
     if (ngx_selective_cache_purge_init_db(cycle) != NGX_OK) {
         return NGX_ERROR;
     }
@@ -156,7 +155,6 @@ ngx_selective_cache_purge_init_worker(ngx_cycle_t *cycle)
         return NGX_ERROR;
     }
     ngx_queue_init(purge_requests_queue);
-    purging[ngx_process_slot] = 0;
 
     ngx_selective_cache_purge_sync_memory_to_database();
 
@@ -191,14 +189,9 @@ ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle)
     data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     if (data->syncing_slot == ngx_process_slot) {
         ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, data, ngx_selective_cache_purge_zone_finish);
+        ngx_selective_cache_purge_destroy_db_context(&data->db_ctx);
         ngx_unlock(&data->syncing);
     }
-
-    if (sync_temp_pool[ngx_process_slot] != NULL) {
-        ngx_destroy_pool(sync_temp_pool[ngx_process_slot]);
-    }
-
-    ngx_selective_cache_purge_destroy_db_context(&sync_db_ctx);
 }
 
 
