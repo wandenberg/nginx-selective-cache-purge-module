@@ -416,6 +416,7 @@ ngx_selective_cache_purge_sync_memory_to_database(void)
         }
         data->zones = 0;
         data->zones_to_sync = 0;
+        data->syncing_slot = ngx_process_slot;
         ngx_queue_init(&data->files_info_to_renew_queue);
 
         if ((sync_temp_pool[ngx_process_slot] = ngx_create_pool(4096, ngx_cycle->log)) == NULL) {
@@ -458,6 +459,24 @@ ngx_selective_cache_purge_zone_init(ngx_rbtree_node_t *v_node, void *data)
         return NGX_ERROR;
     }
     node->sync_database_event->data = node;
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_selective_cache_purge_zone_finish(ngx_rbtree_node_t *v_node, void *data)
+{
+    ngx_selective_cache_purge_zone_t *node = (ngx_selective_cache_purge_zone_t *) v_node;
+
+    ngx_rbtree_init(&node->files_info_tree, &node->files_info_sentinel, ngx_selective_cache_purge_rbtree_file_info_insert);
+    ngx_queue_init(&node->files_info_queue);
+
+    ngx_selective_cache_purge_destroy_db_context(&node->db_ctx);
+
+    if ((node->sync_database_event != NULL) && (node->sync_database_event->timer_set)) {
+        ngx_del_timer(node->sync_database_event);
+    }
+
     return NGX_OK;
 }
 

@@ -73,6 +73,7 @@ typedef struct {
 // shared memory
 typedef struct {
     ngx_atomic_t              syncing;
+    ngx_int_t                 syncing_slot;
     ngx_rbtree_t              zones_tree;
     ngx_uint_t                zones;
     ngx_uint_t                zones_to_sync;
@@ -95,6 +96,7 @@ ngx_atomic_t purging[NGX_MAX_PROCESSES];
 ngx_queue_t *purge_requests_queue;
 
 ngx_int_t ngx_selective_cache_purge_sync_memory_to_database(void);
+ngx_int_t ngx_selective_cache_purge_zone_finish(ngx_rbtree_node_t *v_node, void *data);
 
 static void       ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r);
 
