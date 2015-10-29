@@ -187,10 +187,9 @@ ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle)
     ngx_selective_cache_purge_finish_db(cycle);
 
     data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
-    if (data->syncing_slot == ngx_process_slot) {
-        ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, data, ngx_selective_cache_purge_zone_finish);
-        ngx_selective_cache_purge_destroy_db_context(&data->db_ctx);
-        ngx_unlock(&data->syncing);
+    if ((data->syncing_slot == ngx_process_slot) && (data->syncing_pid != -1)) {
+        kill(data->syncing_pid, SIGTERM);
+        ngx_selective_cache_purge_cleanup_sync(data, 1);
     }
 }
 
@@ -240,6 +239,10 @@ ngx_selective_cache_purge_postconfig(ngx_conf_t *cf)
     ngx_selective_cache_purge_main_conf_t *conf = ngx_http_conf_get_module_main_conf(cf, ngx_selective_cache_purge_module);
 
     if (!conf->enabled) {
+        return NGX_OK;
+    }
+
+    if ((ngx_process != NGX_PROCESS_SINGLE) && (ngx_process != NGX_PROCESS_WORKER)) {
         return NGX_OK;
     }
 
@@ -329,6 +332,8 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
 
     d->syncing = 0;
     d->syncing_slot = 0;
+    d->syncing_pid = -1;
+    d->syncing_pipe_fd = -1;
 
     part = (ngx_list_part_t *) &ngx_selective_cache_purge_shared_memory_list->part;
     shm_zones = part->elts;

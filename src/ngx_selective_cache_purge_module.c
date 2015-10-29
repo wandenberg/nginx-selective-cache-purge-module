@@ -1,6 +1,7 @@
 #include <ngx_selective_cache_purge_module_utils.c>
 #include <ngx_selective_cache_purge_module_setup.c>
 #include <ngx_selective_cache_purge_module_redis.c>
+#include <ngx_selective_cache_purge_module_sync.c>
 
 ngx_str_t        *ngx_selective_cache_purge_get_cache_key(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_register_cache_entry(ngx_http_request_t *r, ngx_str_t *cache_key);
@@ -9,9 +10,7 @@ void              ngx_selective_cache_purge_entries_handler(ngx_http_request_t *
 void              ngx_selective_cache_purge_finalize_request_with_error(ngx_http_request_t *r);
 void              ngx_selective_cache_purge_send_purge_response(void *d);
 static void       ngx_selective_cache_purge_force_remove(ngx_http_request_t *r);
-void              ngx_selective_cache_purge_organize_entries(ngx_selective_cache_purge_shm_data_t *data);
 ngx_int_t         ngx_selective_cache_purge_create_cache_item_for_zone(ngx_rbtree_node_t *v_node, void *data);
-ngx_int_t         ngx_selective_cache_purge_zone_init(ngx_rbtree_node_t *v_node, void *data);
 void              ngx_selective_cache_purge_store_new_entries(void *d);
 void              ngx_selective_cache_purge_remove_old_entries(void *d);
 void              ngx_selective_cache_purge_renew_entries(void *d);
@@ -406,23 +405,7 @@ ngx_selective_cache_purge_sync_memory_to_database(void)
 
     ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     if (ngx_trylock(&data->syncing)) {
-        ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process started");
-
-        if ((data->db_ctx = ngx_selective_cache_purge_init_db_context()) == NULL) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory to sync db_ctx");
-            return NGX_ERROR;
-        }
-        data->zones = 0;
-        data->zones_to_sync = 0;
-        data->syncing_slot = ngx_process_slot;
-        ngx_queue_init(&data->files_info_to_renew_queue);
-
-        ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, data, ngx_selective_cache_purge_zone_init);
-
-        data->db_ctx->data = data;
-        data->db_ctx->callback = (void *) ngx_selective_cache_purge_organize_entries;
-        ngx_selective_cache_purge_read_all_entires(data->db_ctx);
-        return NGX_OK;
+        return ngx_selective_cache_purge_fork_sync_process();
     }
     return NGX_DECLINED;
 }
@@ -447,7 +430,7 @@ ngx_selective_cache_purge_zone_init(ngx_rbtree_node_t *v_node, void *data)
         return NGX_ERROR;
     }
 
-    if ((node->sync_database_event = ngx_pcalloc(d->db_ctx->pool, sizeof(ngx_event_t))) == NULL) {
+    if ((node->sync_database_event = ngx_pcalloc(node->db_ctx->pool, sizeof(ngx_event_t))) == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: unable to allocate memory for sync database event");
         return NGX_ERROR;
     }
@@ -464,11 +447,12 @@ ngx_selective_cache_purge_zone_finish(ngx_rbtree_node_t *v_node, void *data)
     ngx_rbtree_init(&node->files_info_tree, &node->files_info_sentinel, ngx_selective_cache_purge_rbtree_file_info_insert);
     ngx_queue_init(&node->files_info_queue);
 
-    ngx_selective_cache_purge_destroy_db_context(&node->db_ctx);
-
-    if ((node->sync_database_event != NULL) && (node->sync_database_event->timer_set)) {
+    if ((node->sync_database_event != NULL) && node->sync_database_event->active) {
         ngx_del_timer(node->sync_database_event);
     }
+
+    ngx_selective_cache_purge_destroy_db_context(&node->db_ctx);
+    node->sync_database_event = NULL;
 
     return NGX_OK;
 }
@@ -788,7 +772,6 @@ ngx_selective_cache_purge_store_new_entries(void *d)
 
     if (!node->read_memory && (node->count <= 0)) {
         data->zones_to_sync--;
-        ngx_selective_cache_purge_destroy_db_context(&node->db_ctx);
         ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync for zone %V from memory to database finished", node->name);
     }
 
@@ -860,11 +843,9 @@ ngx_selective_cache_purge_renew_entries(void *d)
         }
     }
 
-    ngx_selective_cache_purge_destroy_db_context(&data->db_ctx);
-
-    ngx_unlock(&data->syncing);
-
     ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process finished");
+
+    ngx_selective_cache_purge_cleanup_sync(data, 0);
 }
 
 
