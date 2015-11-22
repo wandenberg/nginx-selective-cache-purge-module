@@ -242,10 +242,6 @@ ngx_selective_cache_purge_postconfig(ngx_conf_t *cf)
         return NGX_OK;
     }
 
-    if ((ngx_process != NGX_PROCESS_SINGLE) && (ngx_process != NGX_PROCESS_WORKER)) {
-        return NGX_OK;
-    }
-
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
 
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_LOG_PHASE].handlers);
@@ -316,6 +312,10 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
 
     if (data) {
         d = (ngx_selective_cache_purge_shm_data_t *) data;
+
+        if (d->syncing_pid != -1) {
+            kill(d->syncing_pid, SIGTERM);
+        }
     } else {
         if ((d = (ngx_selective_cache_purge_shm_data_t *) ngx_slab_alloc(shpool, sizeof(*d))) == NULL) {
             return NGX_ERROR;
@@ -326,14 +326,14 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         }
 
         ngx_rbtree_init(&d->zones_tree, sentinel, ngx_selective_cache_purge_rbtree_zones_insert);
+
+        d->syncing = 0;
+        d->syncing_slot = 0;
+        d->syncing_pid = -1;
+        d->syncing_pipe_fd = -1;
     }
 
     shm_zone->data = d;
-
-    d->syncing = 0;
-    d->syncing_slot = 0;
-    d->syncing_pid = -1;
-    d->syncing_pipe_fd = -1;
 
     part = (ngx_list_part_t *) &ngx_selective_cache_purge_shared_memory_list->part;
     shm_zones = part->elts;
