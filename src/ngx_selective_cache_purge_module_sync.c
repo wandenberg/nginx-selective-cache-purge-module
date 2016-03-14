@@ -26,7 +26,7 @@ ngx_selective_cache_purge_fork_sync_process(void)
     pipefd[1] = -1;
 
     if (pipe(pipefd) == -1) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "video thumb extractor module: unable to initialize a pipe");
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: unable to initialize a pipe");
         return NGX_ERROR;
     }
 
@@ -43,7 +43,7 @@ ngx_selective_cache_purge_fork_sync_process(void)
         close(pipefd[0]);
         close(pipefd[1]);
 
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "video thumb extractor module: unable to make pipe write end live longer");
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: unable to make pipe write end live longer");
         return NGX_ERROR;
     }
 
@@ -64,7 +64,7 @@ ngx_selective_cache_purge_fork_sync_process(void)
             close(pipefd[1]);
         }
 
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "video thumb extractor module: unable to fork the process");
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: unable to fork the process");
         return NGX_ERROR;
         break;
 
@@ -92,13 +92,19 @@ ngx_selective_cache_purge_fork_sync_process(void)
 
         if (pipefd[0] != -1) {
             shm_data->conn = ngx_get_connection(pipefd[0], ngx_cycle->log);
+            if (shm_data->conn == NULL) {
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: failed to add child control event");
+                return NGX_ERROR;
+            }
+
             shm_data->conn->data = shm_data;
 
             rev = shm_data->conn->read;
             rev->handler = ngx_selective_cache_purge_end_sync;
+            rev->log = ngx_cycle->log;
 
             if (ngx_add_event(rev, NGX_READ_EVENT, 0) != NGX_OK) {
-                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "video thumb extractor module: failed to add child control event");
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: failed to add child control event");
             }
         }
         break;
