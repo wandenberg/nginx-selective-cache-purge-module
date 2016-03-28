@@ -269,6 +269,7 @@ ngx_selective_cache_purge_init_db_context(void)
         db_ctx->data = NULL;
         db_ctx->connection = NULL;
         db_ctx->purging = 0;
+        ngx_str_null(&db_ctx->purge_query);
         ngx_queue_init(&db_ctx->entries);
 
         if ((db_ctx->pool = ngx_create_pool(4096, ngx_cycle->log)) == NULL) {
