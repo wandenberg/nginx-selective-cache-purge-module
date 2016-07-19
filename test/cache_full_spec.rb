@@ -250,20 +250,31 @@ describe "Selective Cache Purge Module Cache Full" do
             initial_size = cached_files.count
             expect(initial_size).to eq 1023
 
+            log_pre = File.readlines(conf.access_log)
+
             EventMachine.run do
-              req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*", inactivity_timeout: 0.008).get
+              req = EventMachine::HttpRequest.new("http://#{nginx_host}:#{nginx_port}/purge/*").get
               req.callback do
                 fail("The request was not canceled")
                 EventMachine.stop
               end
               req.errback do
-                final_size = cached_files.count
-                expect(final_size).to eql initial_size
+                expect(cached_files.count).to eql initial_size
 
-                EM.add_timer(1) do
-                  expect(final_size).to eql initial_size
+                EM.next_tick do
                   EventMachine.stop
+                  EM.run do
+                    EM.add_timer(1) do
+                      expect(cached_files.count).to eql initial_size
+                      log_pos = File.readlines(conf.access_log)
+                      expect((log_pos - log_pre).join).to include("GET /purge/* HTTP/1.1 (499)")
+                      EventMachine.stop
+                    end
+                  end
                 end
+              end
+              EM.next_tick do
+                req.close
               end
             end
           end
