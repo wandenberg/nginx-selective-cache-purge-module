@@ -464,7 +464,7 @@ ngx_selective_cache_purge_store_new_entries(void *d)
         if (h.version != NGX_HTTP_CACHE_VERSION) {
             node->count--;
             ngx_queue_remove(q);
-            ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "ngx_selective_cache_purge: cache file \"%V\" version mismatch", &file.name);
+            ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "ngx_selective_cache_purge: cache file \"%V\" version mismatch. expected: %d, cached: %d", &file.name, NGX_HTTP_CACHE_VERSION, h.version);
             ngx_close_file(file.fd);
             continue;
         }

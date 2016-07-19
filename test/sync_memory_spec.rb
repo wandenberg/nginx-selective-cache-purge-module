@@ -11,11 +11,11 @@ describe "Selective Cache Purge Module Sync Memory" do
     FileUtils.rm_rf Dir["#{proxy_cache_path}_2/**"]
     FileUtils.mkdir_p "#{proxy_cache_path}_2"
 
-    nginx_version = `#{NginxTestHelper.nginx_executable} -V 2>&1`.match(/nginx version\: nginx\/([\d\.]+)/)[1]
+    nginx_version = Gem::Version.new(`#{NginxTestHelper.nginx_executable} -V 2>&1`.match(/nginx version\: nginx\/([\d\.]+)/)[1])
     zip_name = "cache.zip"
-    if nginx_version.match(/1\.7\.[34567]/)
+    if nginx_version.between?(Gem::Version.new('1.7.3'), Gem::Version.new('1.7.7'))
       zip_name = "cache_2.zip"
-    elsif nginx_version.to_f >= 1.7
+    elsif nginx_version >= Gem::Version.new('1.7.8')
       zip_name = "cache_3.zip"
     end
 
