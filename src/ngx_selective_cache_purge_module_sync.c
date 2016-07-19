@@ -153,6 +153,10 @@ ngx_selective_cache_purge_run_sync(void)
     cycle->conf_prefix = ngx_cycle->conf_prefix;
 
     cycle->connection_n = 512;
+#if (nginx_version >= 1009011)
+    cycle->modules = ngx_modules;
+#endif
+
 
     ngx_process = NGX_PROCESS_HELPER;
 
