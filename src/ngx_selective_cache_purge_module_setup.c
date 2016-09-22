@@ -281,6 +281,7 @@ ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf)
 
         if ((shm_zones[i].tag != NULL) && (ngx_selective_cache_purge_get_module_type_by_tag(shm_zones[i].tag) != NULL)) {
             qtd_zones++;
+            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: Zone %V is number: %d", &shm_zones[i].shm.name, qtd_zones);
         }
     }
 
@@ -352,11 +353,13 @@ ngx_selective_cache_purge_init_shm_zone(ngx_shm_zone_t *shm_zone, void *data)
         if (shm_zones[i].tag != NULL) {
             ngx_str_t *type = ngx_selective_cache_purge_get_module_type_by_tag(shm_zones[i].tag);
             if (type != NULL) {
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: Allocating memory for zone %V", &shm_zones[i].shm.name);
                 zone = ngx_selective_cache_purge_find_zone(&shm_zones[i].shm.name, type);
                 if (zone != NULL) {
                     ngx_rbtree_delete(&d->zones_tree, &zone->node);
                 } else {
                     if ((zone = ngx_slab_alloc(shpool, sizeof(*zone))) == NULL) {
+                        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: error while allocating memory for zone %V", &shm_zones[i].shm.name);
                         return NGX_ERROR;
                     }
                 }
