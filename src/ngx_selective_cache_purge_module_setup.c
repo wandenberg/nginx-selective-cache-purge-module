@@ -284,7 +284,7 @@ ngx_selective_cache_purge_set_up_shm(ngx_conf_t *cf)
         }
     }
 
-    shm_size = ngx_align((3 * ngx_pagesize) + (qtd_zones * sizeof(ngx_selective_cache_purge_zone_t)), ngx_pagesize);
+    shm_size = ngx_align((3 * ngx_pagesize) + (qtd_zones * ngx_align(sizeof(ngx_selective_cache_purge_zone_t), 256)), ngx_pagesize);
 
     ngx_selective_cache_purge_shm_zone = ngx_shared_memory_add(cf, &ngx_selective_cache_purge_shm_name, shm_size, &ngx_selective_cache_purge_module);
 

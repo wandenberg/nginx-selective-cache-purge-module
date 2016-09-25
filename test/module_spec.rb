@@ -338,5 +338,12 @@ describe "Selective Cache Purge Module" do
       end
     end
   end
+
+  context "when doing a complex configuration" do
+    it "should accept when a huge number of zones are used" do
+      additional_config = 150.times.map{|i| "proxy_cache_path /tmp/cache_zone_#{i} levels=1:2 keys_zone=cache_zone_#{i}:10m loader_files=1000 loader_threshold=450 use_temp_path=off inactive=12h;"}.join("\n")
+      expect(nginx_test_configuration(additional_config: additional_config)).to_not include("no memory")
+    end
+  end
 end
 
