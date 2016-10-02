@@ -46,6 +46,8 @@ An example:
 
         selective_cache_purge_redis_database 1;
 
+        selective_cache_purge_response_maxlines 100;
+
         server {
             listen          8080;
             server_name     localhost;

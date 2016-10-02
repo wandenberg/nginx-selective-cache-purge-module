@@ -23,6 +23,7 @@ static ngx_str_t SYNC_OPERATION_START_MESSAGE = ngx_string("Sync operation will 
 static ngx_str_t SYNC_OPERATION_PROGRESS_MESSAGE = ngx_string("Sync operation in progress, wait ...\n");
 static ngx_str_t SYNC_OPERATION_NOT_START_MESSAGE = ngx_string("Sync will NOT be started, check logs.\n");
 static ngx_str_t NOTHING_TO_DO_MESSAGE = ngx_string("Nothing to be done.\n");
+static ngx_str_t SKIP_REST_MESSAGE = ngx_string("List is too long, skip the rest ...\n");
 
 ngx_int_t
 ngx_selective_cache_purge_indexer_handler(ngx_http_request_t *r)
@@ -192,6 +193,11 @@ ngx_selective_cache_purge_send_purge_response(void *d)
     ngx_str_t                               *response;
     ngx_int_t                                rc;
 
+    ngx_selective_cache_purge_main_conf_t   *conf = ngx_http_get_module_main_conf(r, ngx_selective_cache_purge_module);
+
+    unsigned                                 passed = 0;
+    unsigned                                 maxlines = conf->response_maxlines;
+
     r->write_event_handler = ngx_http_request_empty_handler;
     ctx->db_ctx->callback = NULL;
 
@@ -220,6 +226,13 @@ ngx_selective_cache_purge_send_purge_response(void *d)
         for (cur = ngx_queue_head(&ctx->db_ctx->entries); cur != ngx_queue_sentinel(&ctx->db_ctx->entries); cur = ngx_queue_next(cur)) {
             entry = ngx_queue_data(cur, ngx_selective_cache_purge_cache_item_t, queue);
             if (entry->removed) {
+
+                if (++passed > maxlines) {
+                    if (passed == maxlines + 1)
+                        ngx_selective_cache_purge_send_response_text(r, SKIP_REST_MESSAGE.data, SKIP_REST_MESSAGE.len, 0);
+                    continue;
+                }
+
                 ngx_selective_cache_purge_send_response_text(r, entry->cache_key->data, entry->cache_key->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, CACHE_KEY_FILENAME_SEPARATOR.data, CACHE_KEY_FILENAME_SEPARATOR.len, 0);
 

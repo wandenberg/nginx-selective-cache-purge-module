@@ -27,6 +27,7 @@ typedef struct {
     ngx_str_t                 redis_host;
     ngx_uint_t                redis_port;
     ngx_uint_t                redis_database;
+    ngx_uint_t                response_maxlines;
 } ngx_selective_cache_purge_main_conf_t;
 
 typedef struct {
