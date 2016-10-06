@@ -226,19 +226,17 @@ ngx_selective_cache_purge_send_purge_response(void *d)
         for (cur = ngx_queue_head(&ctx->db_ctx->entries); cur != ngx_queue_sentinel(&ctx->db_ctx->entries); cur = ngx_queue_next(cur)) {
             entry = ngx_queue_data(cur, ngx_selective_cache_purge_cache_item_t, queue);
             if (entry->removed) {
-
-                if (++passed > maxlines) {
-                    if (passed == maxlines + 1)
-                        ngx_selective_cache_purge_send_response_text(r, SKIP_REST_MESSAGE.data, SKIP_REST_MESSAGE.len, 0);
-                    continue;
-                }
-
                 ngx_selective_cache_purge_send_response_text(r, entry->cache_key->data, entry->cache_key->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, CACHE_KEY_FILENAME_SEPARATOR.data, CACHE_KEY_FILENAME_SEPARATOR.len, 0);
 
                 ngx_selective_cache_purge_send_response_text(r, entry->path->data, entry->path->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, entry->filename->data, entry->filename->len, 0);
                 ngx_selective_cache_purge_send_response_text(r, LF_SEPARATOR.data, LF_SEPARATOR.len, 0);
+
+                if (++passed == maxlines) {
+                    ngx_selective_cache_purge_send_response_text(r, SKIP_REST_MESSAGE.data, SKIP_REST_MESSAGE.len, 0);
+                    break;
+                }
             }
         }
 
