@@ -50,6 +50,12 @@ static ngx_command_t  ngx_selective_cache_purge_commands[] = {
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_selective_cache_purge_main_conf_t, response_maxlines),
       NULL },
+    { ngx_string("selective_cache_purge_keep_opened_files"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_selective_cache_purge_main_conf_t, keep_opened_files),
+      NULL },
     { ngx_string("selective_cache_purge_query"),
       NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_selective_cache_purge,
@@ -105,6 +111,7 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     conf->redis_port = NGX_CONF_UNSET_UINT;
     conf->redis_database = NGX_CONF_UNSET_UINT;
     conf->response_maxlines = NGX_CONF_UNSET_UINT;
+    conf->keep_opened_files = NGX_CONF_UNSET_UINT;
 
     return conf;
 }
@@ -135,6 +142,7 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
     ngx_conf_merge_uint_value(conf->redis_port, conf->redis_port, 6379);
     ngx_conf_merge_uint_value(conf->redis_database, conf->redis_database, 0);
     ngx_conf_merge_uint_value(conf->response_maxlines, conf->response_maxlines, NGX_MAX_INT_T_VALUE);
+    ngx_conf_merge_uint_value(conf->keep_opened_files, conf->keep_opened_files, NGX_MAX_INT_T_VALUE);
 #endif
 
     return NGX_CONF_OK;

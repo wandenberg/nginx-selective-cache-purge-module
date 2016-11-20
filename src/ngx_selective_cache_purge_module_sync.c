@@ -114,6 +114,53 @@ ngx_selective_cache_purge_fork_sync_process(void)
 }
 
 
+static void
+list_and_close_opened_files(ngx_cycle_t *cycle)
+{
+    ngx_uint_t        i, total;
+    ngx_list_part_t  *part = &cycle->open_files.part;
+    ngx_open_file_t  *file = part->elts;
+
+    ngx_selective_cache_purge_main_conf_t   *conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_selective_cache_purge_module);
+
+    for (i = total = 0; /* void */ ; i++, total++) {
+
+        if (i >= part->nelts) {
+            if (part->next == NULL) {
+                break;
+            }
+            part = part->next;
+            file = part->elts;
+            i = 0;
+        }
+
+        if (file[i].name.len == 0) {
+            continue;
+        }
+
+        if (file[i].flush) {
+            file[i].flush(&file[i], cycle->log);
+        }
+
+        ngx_log_error(NGX_LOG_ERR, cycle->log, 0,
+            "%s: n=%d, fd=%d, len=%d, name=%s",
+            total < conf->keep_opened_files ? "keep_opened_file" : "close_opened_file",
+            total, file[i].fd, file[i].name.len, file[i].name.data);
+
+        if (total >= conf->keep_opened_files) {     /* Don't close main log */
+            ngx_close_file(file[i].fd);
+        }
+    }
+
+    if (cycle->open_files.part.nelts > conf->keep_opened_files) {
+        cycle->open_files.part.nelts = conf->keep_opened_files;
+        cycle->open_files.part.next  = NULL;
+    } else {
+        /* TODO! */
+    }
+}
+
+
 void
 ngx_selective_cache_purge_run_sync(void)
 {
@@ -190,6 +237,8 @@ ngx_selective_cache_purge_run_sync(void)
     data->db_ctx->data = data;
     data->db_ctx->callback = (void *) ngx_selective_cache_purge_organize_entries;
     ngx_selective_cache_purge_read_all_entires(data->db_ctx);
+
+    list_and_close_opened_files(cycle->old_cycle);
 
     for ( ;; ) {
         ngx_process_events_and_timers(cycle);
