@@ -14,7 +14,7 @@ ngx_int_t         ngx_selective_cache_purge_create_cache_item_for_zone(ngx_rbtre
 static void       ngx_selective_cache_purge_deleting_files_timer_handler(ngx_event_t *ev);
 
 static ngx_str_t NOT_FOUND_MESSAGE = ngx_string("Could not found any entry that match the expression: %V\n");
-static ngx_str_t OK_MESSAGE = ngx_string("The following entries where purged matched by the expression: %V\n");
+static ngx_str_t OK_MESSAGE = ngx_string("The following entries were purged matched by the expression: %V\n");
 static ngx_str_t CACHE_KEY_FILENAME_SEPARATOR = ngx_string(" -> ");
 static ngx_str_t LF_SEPARATOR = ngx_string("\n");
 static ngx_str_t SYNC = ngx_string("sync");
