@@ -9,91 +9,91 @@ _This module is not distributed with the Nginx source. See [the installation ins
 Configuration
 -------------
 
-An example:
+An example configuration.
 
-    pid         logs/nginx.pid;
-    error_log   logs/nginx-main_error.log debug;
+```nginx
+pid         logs/nginx.pid;
+error_log   logs/nginx-main_error.log debug;
 
-    # Development Mode
-    # master_process      off;
-    # daemon              off;
-    worker_processes    1;
-    worker_rlimit_core  500M;
-    working_directory /tmp;
-    debug_points abort;
+# Development Mode
+# master_process      off;
+# daemon              off;
+worker_processes    1;
+worker_rlimit_core  500M;
+working_directory /tmp;
+debug_points abort;
 
-    events {
-        worker_connections  1024;
-        #use                 kqueue; # MacOS
-        use                 epoll; # Linux
-    }
+events {
+    worker_connections  1024;
+    #use                 kqueue; # MacOS
+    use                 epoll; # Linux
+}
 
-    http {
-        default_type    application/octet-stream;
+http {
+    default_type    application/octet-stream;
 
-        access_log      logs/nginx-http_access.log;
-        error_log       logs/nginx-http_error.log;
+    access_log      logs/nginx-http_access.log;
+    error_log       logs/nginx-http_error.log;
 
-        proxy_cache_path /tmp/cache_zone levels=1:2 keys_zone=zone:10m inactive=10d max_size=100m;
-        proxy_cache_path /tmp/cache_other_zone levels=1:2 keys_zone=other_zone:1m inactive=1d max_size=10m;
+    proxy_cache_path /tmp/cache_zone levels=1:2 keys_zone=zone:10m inactive=10d max_size=100m;
+    proxy_cache_path /tmp/cache_other_zone levels=1:2 keys_zone=other_zone:1m inactive=1d max_size=10m;
 
-        #selective_cache_purge_redis_unix_socket "/tmp/redis.sock";
-        #
-        # or
-        #
-        #selective_cache_purge_redis_host "localhost";
-        #selective_cache_purge_redis_port 6379;
+    #selective_cache_purge_redis_unix_socket "/tmp/redis.sock";
+    #
+    # or
+    #
+    #selective_cache_purge_redis_host "localhost";
+    #selective_cache_purge_redis_port 6379;
 
-        selective_cache_purge_redis_database 1;
+    selective_cache_purge_redis_database 1;
 
-        server {
-            listen          8080;
-            server_name     localhost;
+    server {
+        listen          8080;
+        server_name     localhost;
 
-            # purging by prefix
-            location ~ /purge(.*) {
-                selective_cache_purge_query "$1*";
-            }
-
-            location / {
-                proxy_pass http://localhost:8081;
-
-                proxy_cache zone;
-                proxy_cache_key "$uri";
-                proxy_cache_valid 200 1m;
-            }
+        # purging by prefix
+        location ~ /purge(.*) {
+            selective_cache_purge_query "$1*";
         }
 
-        server {
-            listen          8090;
-            server_name     localhost;
+        location / {
+            proxy_pass http://localhost:8081;
 
-            # purging by extension
-            location ~ /purge/.*(\..*)$ {
-                #purge by extension
-                selective_cache_purge_query "*$1";
-            }
-
-            location / {
-                proxy_pass http://localhost:8081;
-
-                proxy_cache other_zone;
-                proxy_cache_key "$uri";
-                proxy_cache_valid 200 1m;
-            }
-        }
-
-        server {
-            listen          8081;
-            server_name     localhost;
-
-            location / {
-                return 200 "requested url: $uri\n";
-            }
+            proxy_cache zone;
+            proxy_cache_key "$uri";
+            proxy_cache_valid 200 1m;
         }
     }
 
+    server {
+        listen          8090;
+        server_name     localhost;
 
+        # purging by extension
+        location ~ /purge/.*(\..*)$ {
+            #purge by extension
+            selective_cache_purge_query "*$1";
+        }
+
+        location / {
+            proxy_pass http://localhost:8081;
+
+            proxy_cache other_zone;
+            proxy_cache_key "$uri";
+            proxy_cache_valid 200 1m;
+        }
+    }
+
+    server {
+        listen          8081;
+        server_name     localhost;
+
+        location / {
+            return 200 "requested url: $uri\n";
+        }
+    }
+}
+```
 
 <a id="installation"></a>Installation instructions
 --------------------------------------------------
