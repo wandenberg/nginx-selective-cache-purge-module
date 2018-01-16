@@ -150,9 +150,9 @@ open_context(redisAsyncContext **context)
     ngx_selective_cache_purge_main_conf_t *conf = ngx_http_cycle_get_module_main_conf(ngx_cycle, ngx_selective_cache_purge_module);
 
     if (conf->redis_host.data != NULL) {
-        return redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, context);
+        return redis_nginx_open_context((const char *) conf->redis_host.data, conf->redis_port, conf->redis_database, (const char *) conf->redis_password.data, context);
     } else {
-        return redis_nginx_open_context_unix((const char *) conf->redis_socket_path.data, conf->redis_database, context);
+        return redis_nginx_open_context_unix((const char *) conf->redis_socket_path.data, conf->redis_database, (const char *) conf->redis_password.data, context);
     }
 }
 

@@ -11,6 +11,7 @@ module NginxConfiguration
       proxy_cache_path: "/tmp/cache",
       redis_unix_socket: nil,
       redis_host: redis_host,
+      redis_password: nil,
       redis_database: redis_database,
       purge_query: "$1*",
       max_size: "100m",

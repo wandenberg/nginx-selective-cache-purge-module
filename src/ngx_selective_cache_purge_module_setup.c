@@ -44,6 +44,12 @@ static ngx_command_t  ngx_selective_cache_purge_commands[] = {
       NGX_HTTP_MAIN_CONF_OFFSET,
       offsetof(ngx_selective_cache_purge_main_conf_t, redis_database),
       NULL },
+    { ngx_string("selective_cache_purge_redis_password"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_MAIN_CONF_OFFSET,
+      offsetof(ngx_selective_cache_purge_main_conf_t, redis_password),
+      NULL },
     { ngx_string("selective_cache_purge_query"),
       NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_selective_cache_purge,
@@ -98,6 +104,7 @@ ngx_selective_cache_purge_create_main_conf(ngx_conf_t *cf)
     conf->redis_host.data = NULL;
     conf->redis_port = NGX_CONF_UNSET_UINT;
     conf->redis_database = NGX_CONF_UNSET_UINT;
+    conf->redis_password.data = NULL;
 
     return conf;
 }
@@ -123,6 +130,12 @@ ngx_selective_cache_purge_init_main_conf(ngx_conf_t *cf, void *parent)
         conf->redis_socket_path.data = redis_socket_path->data;
 
         conf->enabled = 1;
+    }
+
+    if (conf->redis_password.data != NULL) {
+        ngx_str_t *redis_password = ngx_selective_cache_purge_alloc_str(cf->pool, conf->redis_password.len);
+        ngx_snprintf(redis_password->data, conf->redis_password.len, "%V", &conf->redis_password);
+        conf->redis_password.data = redis_password->data;
     }
 
     ngx_conf_merge_uint_value(conf->redis_port, conf->redis_port, 6379);

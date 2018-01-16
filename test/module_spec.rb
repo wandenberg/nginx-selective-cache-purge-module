@@ -98,6 +98,34 @@ describe "Selective Cache Purge Module" do
       expect(get_database_entries_for(path)).not_to be_empty
     end
 
+    it "should save using a password protected redis" do
+      path = "/index.html"
+      redis.config(:set, :requirepass, 'some_password')
+      redis.auth 'some_password'
+      begin
+        nginx_run_server(config.merge(redis_password: 'some_password')) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '200'
+        end
+        expect(get_database_entries_for(path)).not_to be_empty
+      ensure
+        redis.config(:set, :requirepass, '')
+      end
+    end
+
+    it "should not save with a wrong password" do
+      path = "/index.html"
+      redis.config(:set, :requirepass, 'some_password')
+      redis.auth 'some_password'
+      begin
+        nginx_run_server(config.merge(redis_password: 'another_password')) do
+          expect(response_for("http://#{nginx_host}:#{nginx_port}#{path}").code).to eq '200'
+        end
+        expect(get_database_entries_for(path)).to be_empty
+      ensure
+        redis.config(:set, :requirepass, '')
+      end
+    end
+
     it "should use the cache time or the inactive time as expires which is bigger" do
       nginx_run_server(config) do
         expect(response_for("http://#{nginx_host}:#{nginx_port}/index.html").code).to eq '200'
@@ -286,6 +314,37 @@ describe "Selective Cache Purge Module" do
           purged_files.each do |f|
             expect(File.exists?("#{proxy_cache_path}#{f}")).to be_falsey
           end
+        end
+      end
+
+      it "should remove using a password protected redis" do
+        purged_urls = ["/index.html","/index2.html"]
+        redis.config(:set, :requirepass, 'some_password')
+        redis.auth 'some_password'
+        begin
+          nginx_run_server(config.merge(redis_password: 'some_password')) do
+            prepare_cache
+            purged_files = get_database_entries_for('/index*').map{ |entry| entry[-1] }
+
+            expect(purged_files.count).to eq 2
+            purged_files.each do |f|
+              expect(File.exists?("#{proxy_cache_path}#{f}")).to be_truthy
+            end
+
+            resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
+            expect(resp.code).to eq '200'
+            expect(resp.body).to have_purged_urls(purged_urls)
+
+            expect(get_database_entries_for('/index*')).to be_empty
+            remaining_keys = get_database_entries_for('*').map{ |entry| entry[0] }.sort
+            expect(remaining_keys).to eql(cached_urls - purged_urls)
+
+            purged_files.each do |f|
+              expect(File.exists?("#{proxy_cache_path}#{f}")).to be_falsey
+            end
+          end
+        ensure
+          redis.config(:set, :requirepass, '')
         end
       end
 
