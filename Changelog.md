@@ -1,3 +1,17 @@
+### 0.8.0
+- Add support to use a redis server protected by password
+- Allow usage of multiple cache zones
+- Fix support to Nginx 1.9.11+
+
+### 0.7.0
+- Fix set initial value for some members in structures
+
+### 0.6.1
+- Fix structure initialization after a reload in the server
+
+### 0.6.0
+- Refactor to work in the log phase instead of header filter phase not interfering in the delivery of the content
+
 ### 0.5.5
 - Add support to connect to redis using unix socket
 
