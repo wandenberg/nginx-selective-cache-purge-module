@@ -4,7 +4,7 @@
 redisAsyncContext *open_context(redisAsyncContext **context);
 void scan_callback(redisAsyncContext *c, void *rep, void *privdata);
 void scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata);
-ngx_int_t parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
+ngx_int_t parse_redis_key_to_cache_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool);
 void select_by_cache_key(ngx_selective_cache_purge_db_ctx_t *db_ctx, char *cursor);
 
 
@@ -172,7 +172,7 @@ scan_callback(redisAsyncContext *c, void *rep, void *privdata)
 
     if (reply->element[1]->elements > 0) {
         for (i = 0; i < reply->element[1]->elements; i++) {
-            if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
+            if (parse_redis_key_to_cache_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
                 db_ctx->err_callback(db_ctx->data);
                 return;
             }
@@ -207,7 +207,7 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
     }
 
     for (i = 0; i < reply->element[1]->elements; i++) {
-        if (parse_redis_key_to_cahe_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
+        if (parse_redis_key_to_cache_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
             db_ctx->err_callback(db_ctx->data);
             return;
         }
@@ -222,7 +222,7 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
 
 
 ngx_int_t
-parse_redis_key_to_cahe_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool)
+parse_redis_key_to_cache_item(u_char *key, ngx_queue_t *entries, ngx_pool_t *pool)
 {
     ngx_str_t redis_key = ngx_null_string;
     int captures[15];
