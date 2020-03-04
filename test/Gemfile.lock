@@ -23,7 +23,7 @@ GEM
     popen4 (0.1.2)
       Platform (>= 0.4.0)
       open4 (>= 0.4.0)
-    rake (10.4.2)
+    rake (12.3.3)
     redis (3.2.1)
     rspec (3.3.0)
       rspec-core (~> 3.3.0)
