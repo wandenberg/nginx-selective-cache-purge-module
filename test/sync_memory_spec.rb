@@ -15,8 +15,10 @@ describe "Selective Cache Purge Module Sync Memory" do
     zip_name = "cache.zip"
     if nginx_version.between?(Gem::Version.new('1.7.3'), Gem::Version.new('1.7.7'))
       zip_name = "cache_2.zip"
-    elsif nginx_version >= Gem::Version.new('1.7.8')
+    elsif nginx_version.between?(Gem::Version.new('1.7.8'), Gem::Version.new('1.11.9'))
       zip_name = "cache_3.zip"
+    elsif nginx_version >= Gem::Version.new('1.11.10')
+      zip_name = "cache_4.zip"
     end
 
     Zip::File.open(File.expand_path("./assets/#{zip_name}", File.dirname(__FILE__))) do |zipfile|
