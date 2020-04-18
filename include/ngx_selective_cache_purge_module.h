@@ -53,6 +53,7 @@ typedef struct {
     ngx_queue_t               queue;
     ngx_queue_t              *last;
     ngx_event_t              *purging_files_event;
+    ngx_event_t              *print_result_event;
     ngx_selective_cache_purge_db_ctx_t      *db_ctx;
 } ngx_selective_cache_purge_request_ctx_t;
 
