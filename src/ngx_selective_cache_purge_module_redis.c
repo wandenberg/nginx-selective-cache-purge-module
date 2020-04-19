@@ -164,18 +164,16 @@ scan_callback(redisAsyncContext *c, void *rep, void *privdata)
     ngx_uint_t                          i;
 
     redisReply *reply = rep;
-    if (reply == NULL) {
+    if ((reply == NULL) || (reply->element == NULL)) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_callback");
         db_ctx->err_callback(db_ctx->data);
         return;
     }
 
-    if (reply->element[1]->elements > 0) {
-        for (i = 0; i < reply->element[1]->elements; i++) {
-            if (parse_redis_key_to_cache_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
-                db_ctx->err_callback(db_ctx->data);
-                return;
-            }
+    for (i = 0; i < reply->element[1]->elements; i++) {
+        if (parse_redis_key_to_cache_item((u_char *) reply->element[1]->element[i]->str, &db_ctx->entries, db_ctx->pool) != NGX_OK) {
+            db_ctx->err_callback(db_ctx->data);
+            return;
         }
     }
 
@@ -200,7 +198,7 @@ scan_by_cache_key_callback(redisAsyncContext *c, void *rep, void *privdata)
         return;
     }
 
-    if (reply == NULL) {
+    if ((reply == NULL) || (reply->element == NULL)) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "ngx_selective_cache_purge: empty reply from redis on scan_by_cache_key_callback");
         db_ctx->err_callback(db_ctx->data);
         return;
