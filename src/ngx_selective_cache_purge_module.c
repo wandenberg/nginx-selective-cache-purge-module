@@ -521,7 +521,7 @@ ngx_selective_cache_purge_cleanup_request_context(ngx_http_request_t *r)
 static void
 ngx_selective_cache_purge_force_remove(ngx_http_request_t *r)
 {
-    ngx_selective_cache_purge_shm_data_t    *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
+    ngx_selective_cache_purge_worker_data_t    *data = ngx_selective_cache_purge_worker_data;
 
     ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, (void *) r, ngx_selective_cache_purge_create_cache_item_for_zone);
 

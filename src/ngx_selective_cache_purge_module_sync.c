@@ -117,6 +117,7 @@ ngx_selective_cache_purge_fork_sync_process(void)
 void
 ngx_selective_cache_purge_run_sync(void)
 {
+    ngx_selective_cache_purge_worker_data_t    *worker_data = ngx_selective_cache_purge_worker_data;
     ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     ngx_uint_t                            i;
     ngx_cycle_t                          *cycle;
@@ -185,7 +186,7 @@ ngx_selective_cache_purge_run_sync(void)
     data->syncing_pid = ngx_pid;
     ngx_queue_init(&data->files_info_to_renew_queue);
 
-    ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, data, ngx_selective_cache_purge_zone_init);
+    ngx_selective_cache_purge_rbtree_walker(&worker_data->zones_tree, worker_data->zones_tree.root, data, ngx_selective_cache_purge_zone_init);
 
     data->db_ctx->data = data;
     data->db_ctx->callback = (void *) ngx_selective_cache_purge_organize_entries;
@@ -222,6 +223,7 @@ ngx_selective_cache_purge_cleanup_sync(ngx_selective_cache_purge_shm_data_t *dat
 {
     ngx_uint_t         i;
     ngx_connection_t  *c;
+    ngx_selective_cache_purge_worker_data_t    *worker_data = ngx_selective_cache_purge_worker_data;
 
     data->syncing_pid = -1;
     ngx_unlock(&data->syncing);
@@ -232,7 +234,7 @@ ngx_selective_cache_purge_cleanup_sync(ngx_selective_cache_purge_shm_data_t *dat
             close(data->syncing_pipe_fd);
             data->syncing_pipe_fd = -1;
         }
-        ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, data, ngx_selective_cache_purge_zone_finish);
+        ngx_selective_cache_purge_rbtree_walker(&worker_data->zones_tree, worker_data->zones_tree.root, data, ngx_selective_cache_purge_zone_finish);
         ngx_selective_cache_purge_destroy_db_context(&data->db_ctx);
         c = ngx_cycle->connections;
 
@@ -375,6 +377,7 @@ ngx_selective_cache_purge_start_sync_database_timer(ngx_rbtree_node_t *v_node, v
 void
 ngx_selective_cache_purge_organize_entries(ngx_selective_cache_purge_shm_data_t *data)
 {
+    ngx_selective_cache_purge_worker_data_t    *worker_data = ngx_selective_cache_purge_worker_data;
     ngx_selective_cache_purge_zone_t *node = NULL;
     ngx_http_file_cache_t            *cache = NULL;
     ngx_queue_t                      *q;
@@ -400,7 +403,7 @@ ngx_selective_cache_purge_organize_entries(ngx_selective_cache_purge_shm_data_t 
         }
     }
 
-    ngx_selective_cache_purge_rbtree_walker(&data->zones_tree, data->zones_tree.root, NULL, ngx_selective_cache_purge_start_sync_database_timer);
+    ngx_selective_cache_purge_rbtree_walker(&worker_data->zones_tree, worker_data->zones_tree.root, NULL, ngx_selective_cache_purge_start_sync_database_timer);
 }
 
 

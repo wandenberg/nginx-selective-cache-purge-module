@@ -72,13 +72,16 @@ typedef struct {
     ngx_http_file_cache_node_t *last;
 } ngx_selective_cache_purge_zone_t;
 
+typedef struct {
+    ngx_rbtree_t              zones_tree;
+} ngx_selective_cache_purge_worker_data_t;
+
 // shared memory
 typedef struct {
     ngx_atomic_t              syncing;
     ngx_int_t                 syncing_slot;
     ngx_pid_t                 syncing_pid;
     ngx_int_t                 syncing_pipe_fd;
-    ngx_rbtree_t              zones_tree;
     ngx_uint_t                zones;
     ngx_uint_t                zones_to_sync;
     ngx_queue_t               files_info_to_renew_queue;
@@ -92,6 +95,8 @@ ngx_int_t ngx_selective_cache_purge_handler(ngx_http_request_t *r);
 ngx_http_output_header_filter_pt ngx_selective_cache_purge_next_header_filter;
 
 ngx_shm_zone_t *ngx_selective_cache_purge_shm_zone = NULL;
+
+ngx_selective_cache_purge_worker_data_t *ngx_selective_cache_purge_worker_data = NULL;
 
 static ngx_str_t ngx_selective_cache_purge_shm_name = ngx_string("selective_cache_purge_module");
 

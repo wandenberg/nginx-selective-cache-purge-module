@@ -258,7 +258,7 @@ ngx_selective_cache_purge_rbtree_file_info_insert(ngx_rbtree_node_t *temp, ngx_r
 ngx_selective_cache_purge_zone_t *
 ngx_selective_cache_purge_find_zone(ngx_str_t *zone, ngx_str_t *type)
 {
-    ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
+    ngx_selective_cache_purge_worker_data_t    *data = ngx_selective_cache_purge_worker_data;
     ngx_rbtree_key_t node_key = ngx_crc32_short(zone->data, zone->len);
     return (ngx_selective_cache_purge_zone_t *) ngx_rbtree_generic_find(&data->zones_tree, node_key, type, ngx_selective_cache_purge_compare_rbtree_zone_type);
 }
