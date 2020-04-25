@@ -265,7 +265,6 @@ ngx_selective_cache_purge_exit_worker(ngx_cycle_t *cycle)
     data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     if ((data->syncing_slot == ngx_process_slot) && (data->syncing_pid != -1)) {
         kill(data->syncing_pid, SIGTERM);
-        ngx_selective_cache_purge_cleanup_sync(data, 1);
     }
 }
 

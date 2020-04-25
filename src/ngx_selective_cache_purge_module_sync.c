@@ -4,6 +4,7 @@
 void              ngx_selective_cache_purge_run_sync(void);
 void              ngx_selective_cache_purge_end_sync(ngx_event_t *ev);
 void              ngx_selective_cache_purge_sig_handler(int signo);
+void              ngx_selective_cache_purge_cleanup_sync(ngx_selective_cache_purge_shm_data_t *data);
 
 ngx_int_t         ngx_selective_cache_purge_zone_init(ngx_rbtree_node_t *v_node, void *data);
 ngx_int_t         ngx_selective_cache_purge_zone_finish(ngx_rbtree_node_t *v_node, void *data);
@@ -21,6 +22,7 @@ ngx_selective_cache_purge_fork_sync_process(void)
     int                                   ret;
     ngx_pid_t                             pid;
     ngx_event_t                          *rev;
+    ngx_connection_t                     *conn;
 
     pipefd[0] = -1;
     pipefd[1] = -1;
@@ -91,15 +93,15 @@ ngx_selective_cache_purge_fork_sync_process(void)
         }
 
         if (pipefd[0] != -1) {
-            shm_data->conn = ngx_get_connection(pipefd[0], ngx_cycle->log);
-            if (shm_data->conn == NULL) {
+            conn = ngx_get_connection(pipefd[0], ngx_cycle->log);
+            if (conn == NULL) {
                 ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, ngx_errno, "ngx_selective_cache_purge: failed to add child control event");
                 return NGX_ERROR;
             }
 
-            shm_data->conn->data = shm_data;
+            conn->data = shm_data;
 
-            rev = shm_data->conn->read;
+            rev = conn->read;
             rev->handler = ngx_selective_cache_purge_end_sync;
             rev->log = ngx_cycle->log;
 
@@ -204,7 +206,9 @@ ngx_selective_cache_purge_end_sync(ngx_event_t *ev)
     ngx_connection_t                     *c = ev->data ;
     ngx_selective_cache_purge_shm_data_t *data = c->data;
 
-    ngx_selective_cache_purge_cleanup_sync(data, 1);
+    data->syncing_pid = -1;
+    ngx_unlock(&data->syncing);
+    ngx_close_connection(c);
 }
 
 
@@ -213,40 +217,34 @@ ngx_selective_cache_purge_sig_handler(int signo)
 {
     ngx_selective_cache_purge_shm_data_t *data = (ngx_selective_cache_purge_shm_data_t *) ngx_selective_cache_purge_shm_zone->data;
     if (signo == SIGTERM) {
-        ngx_selective_cache_purge_cleanup_sync(data, 0);
+        ngx_selective_cache_purge_cleanup_sync(data);
     }
 }
 
 
 void
-ngx_selective_cache_purge_cleanup_sync(ngx_selective_cache_purge_shm_data_t *data, ngx_flag_t parent)
+ngx_selective_cache_purge_cleanup_sync(ngx_selective_cache_purge_shm_data_t *data)
 {
     ngx_uint_t         i;
     ngx_connection_t  *c;
     ngx_selective_cache_purge_worker_data_t    *worker_data = ngx_selective_cache_purge_worker_data;
 
-    data->syncing_pid = -1;
-    ngx_unlock(&data->syncing);
-    if (parent) {
-        ngx_close_connection(data->conn);
-    } else {
-        if (data->syncing_pipe_fd != -1) {
-            close(data->syncing_pipe_fd);
-            data->syncing_pipe_fd = -1;
-        }
-        ngx_selective_cache_purge_rbtree_walker(&worker_data->zones_tree, worker_data->zones_tree.root, data, ngx_selective_cache_purge_zone_finish);
-        ngx_selective_cache_purge_destroy_db_context(&data->db_ctx);
-        c = ngx_cycle->connections;
-
-        for (i = 0; i < ngx_cycle->connection_n; i++) {
-            if (c[i].fd != -1) {
-                ngx_close_connection(&c[i]);
-            }
-        }
-
-        ngx_done_events((ngx_cycle_t *) ngx_cycle);
-        exit(0);
+    if (data->syncing_pipe_fd != -1) {
+        close(data->syncing_pipe_fd);
+        data->syncing_pipe_fd = -1;
     }
+    ngx_selective_cache_purge_rbtree_walker(&worker_data->zones_tree, worker_data->zones_tree.root, data, ngx_selective_cache_purge_zone_finish);
+    ngx_selective_cache_purge_destroy_db_context(&data->db_ctx);
+    c = ngx_cycle->connections;
+
+    for (i = 0; i < ngx_cycle->connection_n; i++) {
+        if (c[i].fd != -1) {
+            ngx_close_connection(&c[i]);
+        }
+    }
+
+    ngx_done_events((ngx_cycle_t *) ngx_cycle);
+    exit(0);
 }
 
 
@@ -594,5 +592,5 @@ ngx_selective_cache_purge_renew_entries(void *d)
 
     ngx_log_error(NGX_LOG_NOTICE, ngx_cycle->log, 0, "ngx_selective_cache_purge: sync process finished");
 
-    ngx_selective_cache_purge_cleanup_sync(data, 0);
+    ngx_selective_cache_purge_cleanup_sync(data);
 }
