@@ -85,7 +85,6 @@ typedef struct {
     ngx_uint_t                zones;
     ngx_uint_t                zones_to_sync;
     ngx_queue_t               files_info_to_renew_queue;
-    ngx_selective_cache_purge_db_ctx_t *db_ctx;
 } ngx_selective_cache_purge_shm_data_t;
 
 ngx_int_t ngx_selective_cache_purge_indexer_handler(ngx_http_request_t *r);
