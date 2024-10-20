@@ -218,7 +218,7 @@ describe "Selective Cache Purge Module" do
 
           expect(purged_files.count).to eq 2
           purged_files.each do |f|
-            expect(File.exists?("#{proxy_cache_path}#{f}")).to be_truthy
+            expect(File.exist?("#{proxy_cache_path}#{f}")).to be_truthy
           end
 
           resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
@@ -230,7 +230,7 @@ describe "Selective Cache Purge Module" do
           expect(remaining_keys).to eql(cached_urls - purged_urls)
 
           purged_files.each do |f|
-            expect(File.exists?("#{proxy_cache_path}#{f}")).to be_falsey
+            expect(File.exist?("#{proxy_cache_path}#{f}")).to be_falsey
           end
         end
       end
@@ -244,7 +244,7 @@ describe "Selective Cache Purge Module" do
 
           expect(purged_files.count).to eq 1
           purged_files.each do |f|
-            expect(File.exists?("#{proxy_cache_path}#{f}")).to be_truthy
+            expect(File.exist?("#{proxy_cache_path}#{f}")).to be_truthy
           end
 
           resp = response_for("http://#{nginx_host}:#{nginx_port}/purge#{path}")
@@ -256,7 +256,7 @@ describe "Selective Cache Purge Module" do
           expect(remaining_keys).to eql(cached_urls - [path])
 
           purged_files.each do |f|
-            expect(File.exists?("#{proxy_cache_path}#{f}")).to be_falsey
+            expect(File.exist?("#{proxy_cache_path}#{f}")).to be_falsey
           end
         end
       end
@@ -300,7 +300,7 @@ describe "Selective Cache Purge Module" do
 
           expect(purged_files.count).to eq 2
           purged_files.each do |f|
-            expect(File.exists?("#{proxy_cache_path}#{f}")).to be_truthy
+            expect(File.exist?("#{proxy_cache_path}#{f}")).to be_truthy
           end
 
           resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
@@ -312,7 +312,7 @@ describe "Selective Cache Purge Module" do
           expect(remaining_keys).to eql(cached_urls - purged_urls)
 
           purged_files.each do |f|
-            expect(File.exists?("#{proxy_cache_path}#{f}")).to be_falsey
+            expect(File.exist?("#{proxy_cache_path}#{f}")).to be_falsey
           end
         end
       end
@@ -328,7 +328,7 @@ describe "Selective Cache Purge Module" do
 
             expect(purged_files.count).to eq 2
             purged_files.each do |f|
-              expect(File.exists?("#{proxy_cache_path}#{f}")).to be_truthy
+              expect(File.exist?("#{proxy_cache_path}#{f}")).to be_truthy
             end
 
             resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/index")
@@ -340,7 +340,7 @@ describe "Selective Cache Purge Module" do
             expect(remaining_keys).to eql(cached_urls - purged_urls)
 
             purged_files.each do |f|
-              expect(File.exists?("#{proxy_cache_path}#{f}")).to be_falsey
+              expect(File.exist?("#{proxy_cache_path}#{f}")).to be_falsey
             end
           end
         ensure
@@ -354,7 +354,7 @@ describe "Selective Cache Purge Module" do
             prepare_cache
             purged_files = get_database_entries_for('*')
             purged_files.each do |entry|
-              expect(File.exists?("#{proxy_cache_path}#{entry[-1]}")).to be_truthy
+              expect(File.exist?("#{proxy_cache_path}#{entry[-1]}")).to be_truthy
             end
 
             # change directory of /index2.html to be read only
@@ -362,7 +362,7 @@ describe "Selective Cache Purge Module" do
 
             # remove the file of /some/path/index.html from disk
             FileUtils.rm("#{proxy_cache_path}/6/93/9b06947cef9c730a57392e1221d3a936")
-            expect(File.exists?("#{proxy_cache_path}/6/93/9b06947cef9c730a57392e1221d3a936")).to be_falsey
+            expect(File.exist?("#{proxy_cache_path}/6/93/9b06947cef9c730a57392e1221d3a936")).to be_falsey
 
             resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/*index*")
             expect(resp.code).to eq '200'
@@ -377,7 +377,7 @@ describe "Selective Cache Purge Module" do
 
           # remove the file of /resources/r1.jpg from disk
           FileUtils.rm("#{proxy_cache_path}/5/32/e121c6da57be48c3f112adf6a8e54325")
-          expect(File.exists?("#{proxy_cache_path}/5/32/e121c6da57be48c3f112adf6a8e54325")).to be_falsey
+          expect(File.exist?("#{proxy_cache_path}/5/32/e121c6da57be48c3f112adf6a8e54325")).to be_falsey
 
           nginx_run_server(config.merge(worker_processes: 1), timeout: 600) do
             resp = response_for("http://#{nginx_host}:#{nginx_port}/purge/resources*")
