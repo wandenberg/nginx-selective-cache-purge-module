@@ -18,7 +18,7 @@ typedef struct {
     ngx_str_t                 purge_query;
     ngx_queue_t               entries;
     ngx_pool_t               *pool;
-    ngx_int_t                 purging:1;
+    ngx_uint_t                purging:1;
 } ngx_selective_cache_purge_db_ctx_t;
 
 typedef struct {
