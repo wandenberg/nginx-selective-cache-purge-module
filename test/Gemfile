@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-ruby '2.7.1'
+ruby '3.3.5'
 
 gem 'rake'
 
@@ -10,6 +10,8 @@ group :test do
   gem 'em-http-request'
   gem 'byebug'
   gem 'rubyzip', require: 'zip'
-  gem 'hiredis'
+  gem 'hiredis-client'
   gem 'redis'
+  gem 'ostruct'
+  gem 'base64'
 end

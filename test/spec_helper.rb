@@ -1,7 +1,7 @@
 require 'rubygems'
 # Set up gems listed in the Gemfile.
 ENV['BUNDLE_GEMFILE'] ||= File.expand_path('Gemfile', File.dirname(__FILE__))
-require 'bundler/setup' if File.exists?(ENV['BUNDLE_GEMFILE'])
+require 'bundler/setup' if File.exist?(ENV['BUNDLE_GEMFILE'])
 Bundler.require(:default, :test) if defined?(Bundler)
 
 require "net/http"
@@ -122,7 +122,7 @@ RSpec.configure do |config|
 
   config.before(:each) do
     clear_database
-    FileUtils.chmod_R(0700, proxy_cache_path) if File.exists?(proxy_cache_path)
+    FileUtils.chmod_R(0700, proxy_cache_path) if File.exist?(proxy_cache_path)
     FileUtils.rm_rf Dir["#{proxy_cache_path}/**"]
     FileUtils.mkdir_p proxy_cache_path
   end
